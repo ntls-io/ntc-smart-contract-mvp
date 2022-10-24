@@ -2,7 +2,7 @@
 
 1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop)
 2. Install [Algorand sandbox](https://github.com/algorand/sandbox)
-   And add this project folder as bind volume in sandbox `docker-compose.yml` under key `services.algod`:
+    and add this project folder as bind volume in sandbox `docker-compose.yml` under key `services.algod`:
    ```yml
    volumes:
      - type: bind
