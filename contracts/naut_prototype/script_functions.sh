@@ -60,23 +60,23 @@ goal app call \
 
 #txn 1
 goal asset optin \
-    --assetid 24 \
-    -a $ACCOUNT_NAUT \
+    --assetid 54 \
+    -a $ACCOUNT_2 \
 
 #Gtx
 #txn 1
 goal app call \
     --app-id $APP_ID \
-    -f $ACCOUNT_NAUT \
+    -f $ACCOUNT_2 \
     --app-arg "str:buy_drt" \
     --app-arg "int:1" \
-    --foreign-asset 24 \
+    --foreign-asset 54 \
     --out txnAppCall.tx
 #txn 2
 goal clerk send \
-    -a 8 \
+    -a 5 \
     -t "$ACCOUNT_APP" \
-    -f "$ACCOUNT_NAUT" \
+    -f "$ACCOUNT_2" \
     --out txnPayment.tx
 
 cat txnAppCall.tx txnPayment.tx > buyCombinedTxns.tx
