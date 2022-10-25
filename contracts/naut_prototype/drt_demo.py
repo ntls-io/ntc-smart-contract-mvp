@@ -5,24 +5,23 @@ from pyteal_helpers import program
 from pyteal_helpers.strings import itoa
 from algosdk.future.transaction import StateSchema
 
-DRT_UNIT_NAME = Bytes("DRT")
-DRT_ASSET_URL = Bytes("https://gold.rush")
-CONTRIBUTOR_UNIT_NAME = Bytes("DRT_C")
+DRT_UNIT_NAME = Bytes("DRT") #need to confirm
+DRT_ASSET_URL = Bytes("https://gold.rush") #this is just for testing... 
+CONTRIBUTOR_UNIT_NAME = Bytes("DRT_C") #came up with this by myself, need to confirm
 DEFAULT_NOTE= Bytes("")
 
 def approval():
     #globals
-    global_data_package_hash = Bytes("data_package_hash") #byteslice, needs to be able to update
-    global_company_wallet_address = Bytes("company_wallet_address") #byteslice, needs to be able to update
+    global_data_package_hash = Bytes("data_package_hash") 
+    global_company_wallet_address = Bytes("company_wallet_address") 
     global_contributor_asset_id = Bytes("global_contributor_asset_id")
     global_drt_counter= Bytes("drt_counter")
  
     #operations
-    op_create_drt = Bytes("create_drt") #operation challenge to initiate game of rock paper scissors
-    op_update_data_package = Bytes("update_data_package") #operation opponent will call to accept the challenge
-    op_contributor_token = Bytes("contributor_token") #op_exist
+    op_create_drt = Bytes("create_drt") 
+    op_update_data_package = Bytes("update_data_package") 
+    op_contributor_token = Bytes("contributor_token") 
     op_new_contributor = Bytes("transfer_to_contributor")
-    op_test = Bytes("test")
     op_update_drt_price = Bytes("update_drt_price")
     op_buy_drt = Bytes("buy_drt")
     
@@ -57,7 +56,6 @@ def approval():
                 TxnField.type_enum: TxnType.Payment,
                 TxnField.amount: amount,
                 TxnField.receiver: receiver,
-                TxnField.fee: Global.min_txn_fee()
             }),
             InnerTxnBuilder.Submit(),
         ])
@@ -101,7 +99,6 @@ def approval():
                 TxnField.xfer_asset: asset_id,
                 TxnField.asset_amount: asset_amount,
                 TxnField.asset_receiver: asset_receiver,
-                TxnField.fee: Global.min_txn_fee()
                 }),
             InnerTxnBuilder.Submit()
         ])
@@ -166,6 +163,7 @@ def approval():
     @Subroutine(TealType.none)
     def create_contributor_token():
         asset_id = ScratchVar()
+        contrib_exist = App.globalGet(global_contributor_asset_id)
         return Seq(
             #basic sanity checks
             program.check_self(
@@ -175,10 +173,8 @@ def approval():
             program.check_rekey_zero(1),
             Assert(
                 And(
-                    Txn.sender() == Global.creator_address(),
-                     #ensure there is atleast 2 arguments
-                    #Txn.application_args.length() == Int(3), #ensure there is, amount, name, hash of database schema, hash of binary
-                
+                    Txn.sender() == Global.creator_address(), #ensure transaction sender is the smart contract creator
+                    contrib_exist == Int(0) #ensure there is not already a data contributor
                 )
             ),
             asset_id.store(inner_asset_create_txn(Bytes("DRT_Contributor"),CONTRIBUTOR_UNIT_NAME ,Bytes("1000"), DRT_ASSET_URL ,DEFAULT_NOTE)), #use scratch variable to store asset id of contributor token
@@ -247,9 +243,8 @@ def approval():
                 And(
                     #ensure the transaction sender is the nautilus wallet address
                     Txn.sender() == Global.creator_address(),
-                    #ensure there is atleast 2 arguments
+                    #ensure that this drt exists
                     drt_exist.hasValue(),
-                     
                 )
             ),
             #update data package to new hash
@@ -262,7 +257,8 @@ def approval():
     @Subroutine(TealType.none)
     def buy_drt():
         assetToBuy = Gtxn[0].assets[0]
-        amountToBePaid = App.globalGet(itoa(assetToBuy))
+        paymentAmount = Gtxn[1].amount()
+        assetExchangeRate = App.globalGet(itoa(assetToBuy))
         drt_exist = App.globalGetEx(Int(0), itoa(assetToBuy))
         buyerOptIn = AssetHolding.balance(Gtxn[0].sender(), assetToBuy)
         assetSupply = AssetHolding.balance(Global.current_application_address(), assetToBuy)
@@ -282,24 +278,17 @@ def approval():
                 And(
                     Gtxn[1].type_enum() == TxnType.Payment,
                     drt_exist.hasValue(), # Check drt exists
-                    amountToBePaid == Gtxn[1].amount(), # Check amount to be paid is correct
-                    Global.current_application_address() == Gtxn[1].receiver(), # check the reciever of the payment is the app
+                    paymentAmount == (assetExchangeRate*Btoi(Gtxn[0].application_args[1])), # Check amount to be paid is correct (exchange rate * how many)
+                    Global.current_application_address() == Gtxn[1].receiver(), # check the reciever of the payment (2nd transaction) is the app
                     buyerOptIn.hasValue(), #ensure the user has opted in to asset
                     assetSupply.value() >= Btoi(Gtxn[0].application_args[1]), #ensure there is enough supply
-                    #ensure there is less than 50 drt counter
-                    App.globalGet(global_drt_counter) < Int(50),
-                    #ensure there is atleast 2 arguments
-                    #Txn.application_args.length() == Int(3), #ensure there is, amount, name, hash of database schema, hash of binary
+                    App.globalGet(global_drt_counter) < Int(50), #ensure there is less than 50 drt counter
+                    Gtxn[0].application_args.length() == Int(2),   #ensure there is atleast 2 arguments
+                    Gtxn[0].sender() == Gtxn[1].sender(),
                 )
             ),
-            #create drt and record asset id
-            # asset_id.store(inner_asset_create_txn(Txn.application_args[1],DRT_UNIT_NAME ,Txn.application_args[2], DRT_ASSET_URL ,Txn.application_args[3])),
-            # #store DRT price in contract alongside asset id in globals
-            # exchange_rate.store(Btoi(Txn.application_args[4])),
-            # App.globalPut(itoa(asset_id.load()),exchange_rate.load()),
-            # #incremement counter
-            # App.globalPut(global_drt_counter, App.globalGet(global_drt_counter) + Int(1)),
-            App.globalPut(Bytes("approved"), Int(1)),
+            # if the above checks out, transfer asset
+            inner_asset_transfer_txn(assetToBuy, Btoi(Gtxn[0].application_args[1]), Gtxn[0].sender()),
             Approve(),
         )
 
