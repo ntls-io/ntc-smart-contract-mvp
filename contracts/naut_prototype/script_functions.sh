@@ -1,24 +1,33 @@
-### Smart Contract function calls ###
+##### Smart Contract function calls #####
 
 ## Add new data contributor - ACCOUNT_2
+# to add a new data contributor, the account to be added in needs to be opted into 
+# - the smart contract (APP_ID)
+# - the contributor token (CONTRIB_ID)
+# and then the smart contract can be instructed to add an new contributor
+#1. optin to application
+goal app optin \
+    --app-id $APP_ID \
+    --from $ACCOUNT_2 \
 
-#this will be a single group transaction including an optin transaction and a transfer instruction
-#1. optin transaction to the asset id of the data contributor token
+#2. optin transaction to the asset id of the data contributor token
 goal asset optin \
     --assetid $CONTRIB_ID \
     -a $ACCOUNT_2 \
 
-#2. transfer instruction from creators account to the smart contract, 
+#3. instruction from creators account to the smart contract to "add_contributor", 
 #NB have to specifiy asset in the transaction instruction
+#NB have to specifiy the amount of rows of data being added to the pool
 goal app call \
     --app-id $APP_ID \
      -f $ACCOUNT_1 \
-    --app-arg "str:transfer_to_contributor" \
-    --app-account "$ACCOUNT_2" \
+    --app-arg "str:add_contributor" \
+    --app-arg "int:7" \
+    --app-arg "str:SVCAJHVSC--hello---DHBSU#$" \
+    --app-account $ACCOUNT_2 \
     --foreign-asset $CONTRIB_ID \
 
 ## Update data package
-
 #transaction to update the data package of the smart contract, only executed from creators address
 goal app call \
     --app-id $APP_ID \
@@ -36,7 +45,7 @@ goal app call \
     --app-arg "str:ALEX_DRT_01" \
     --app-arg "int:10000" \
     --app-arg "str:note" \
-    --app-arg "int:5" \
+    --app-arg "int:3000000" \
 
 # to see the created app ID and its exchange rate of 5 algos
 goal app read --global --app-id $APP_ID --guess-format
@@ -49,7 +58,7 @@ goal app call \
     -f $ACCOUNT_1 \
     --app-arg "str:update_drt_price" \
     --app-arg "int:7" \
-    --foreign-asset 24 \
+    --foreign-asset 125 \
 
 ## Purchase DRT
 # txn 1. user opts in to asset
@@ -60,31 +69,40 @@ goal app call \
 
 #txn 1
 goal asset optin \
-    --assetid 54 \
-    -a $ACCOUNT_2 \
+    --assetid 125 \
+    -a $ACCOUNT_NAUT \
 
-#Gtx
-#txn 1
+
 goal app call \
     --app-id $APP_ID \
-    -f $ACCOUNT_2 \
+    -f $ACCOUNT_NAUT \
     --app-arg "str:buy_drt" \
-    --app-arg "int:1" \
-    --foreign-asset 54 \
+    --app-arg "int:2" \
+    --foreign-asset 125 \
     --out txnAppCall.tx
-#txn 2
+
 goal clerk send \
-    -a 5 \
+    -a 6000000 \
     -t "$ACCOUNT_APP" \
-    -f "$ACCOUNT_2" \
+    -f "$ACCOUNT_NAUT" \
     --out txnPayment.tx
 
 cat txnAppCall.tx txnPayment.tx > buyCombinedTxns.tx
 goal clerk group -i buyCombinedTxns.tx -o buyGroupedTxns.tx
 goal clerk sign -i buyGroupedTxns.tx -o signoutbuy.tx
 goal clerk rawsend -f signoutbuy.tx
+
+goal app read --global --app-id $APP_ID --guess-format
 # create wager transaction /payment 
 # amount, to, and from, and put into output file to
+
+## Claim fees
+goal app call \
+    --app-id $APP_ID \
+    -f $ACCOUNT_2 \
+    --app-arg "str:claim_fees" \
+    --foreign-asset 125 \
+
 
 #nned to fund the smart contract with something
 goal clerk send \

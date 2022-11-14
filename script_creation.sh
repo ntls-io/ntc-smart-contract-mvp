@@ -21,12 +21,11 @@ goal app create \
     --creator $ACCOUNT_1 \
     --approval-prog /data/build/approval.teal \
     --clear-prog /data/build/clear.teal \
-    --global-byteslices 5 \
+    --global-byteslices 3 \
     --global-ints 55 \
-    --local-byteslices 0 \
-    --local-ints 0 \
+    --local-byteslices 2 \
+    --local-ints 3 \
     --extra-pages 1 \
-    --app-arg "str:DGVWUSNA--DATA_PACKAGE_HASH--ASUDBQ" \
     --app-account $ACCOUNT_NAUT \
     --fee 2000 |
     grep Created |
@@ -42,6 +41,12 @@ export ACCOUNT_APP=$(goal app info  --app-id "$APP_ID" | awk '{print $3}' | head
 
 echo "APPLICATION ADDRESS of Smart Contract: ACCOUNT_APP=$ACCOUNT_APP" 
 echo ""
+echo "Optin to Smart Contract"
+goal app optin \
+    --app-id $APP_ID \
+    --from $ACCOUNT_1 \
+    
+echo ""
 echo "Fund smart contract from ACCOUNT_1"
 #now you can fund the smart contract from account 1
 goal clerk send \
@@ -56,9 +61,29 @@ goal app call \
     --app-id $APP_ID \
     -f $ACCOUNT_1 \
     --app-arg "str:contributor_token" \
+    #--app-arg "int:5" \
 
 echo ""
-export CONTRIB_ID=$(goal app read --global --app-id $APP_ID --guess-format | awk '{print $2}' | head -15 | tail -1)
+export CONTRIB_ID=$(goal app read --global --app-id $APP_ID --guess-format | awk '{print $2}' | head -20 | tail -1)
 echo "Store contributor token ID: CONTRIB_ID=$CONTRIB_ID"
+echo ""
+echo "Optin to contributor token"
+
+goal asset optin \
+    --assetid $CONTRIB_ID \
+    -a $ACCOUNT_1 \
+
+echo ""
+echo "Add smart contract creator as a data contributor"
+
+goal app call \
+    --app-id $APP_ID \
+     -f $ACCOUNT_1 \
+    --app-arg "str:add_contributor" \
+    --app-arg "int:5" \
+    --app-arg "str:DGVWUSNA--DATA_PACKAGE_HASH--ASUDBQ" \
+    --app-account $ACCOUNT_1 \
+    --foreign-asset $CONTRIB_ID \
+    
 echo ""
 echo "Smart Contract creation complete."
