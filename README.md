@@ -22,62 +22,71 @@
 5. Use Python interpreter: `./venv/Scripts/python.exe`
    VSCode: `Python: Select Interpreter`
 
-##### Smart Contract function calls
+# How to run
 
-#### General calls
+1. Follow the setup instructions above.
+2. Build the smart contract
+```txt
+$ ./build.sh contracts.naut_prototype.drt_demo
+```
+3. Enter sandbox
+```txt
+$ ./sandbox enter algod
+```
+4. In sandbox, deploy and create smart contract
+```txt
+$ source /data/script_creation.sh
+```
+5. In sandbox, run example
+```txt
+$ source /data/contracts/naut_prototype/test.sh 
+```
 
-# see global variables of smart contract
+# Smart Contract Calls 
 
+## General Calls
+### See global variables of smart contract
 ```txt
 goal app read --global --app-id $APP_ID --guess-format
 ```
 
-# see application info of smart contract
-
+### See application info of smart contract
 ```txt
 goal app info --app-id $APP_ID
 ```
 
-# see account info of the smart contract (or other accounts)
-
+### See account info of the smart contract (or other accounts)
 ```txt
 goal account info -a $ACCOUNT_APP
 ```
 
-# see local variables of opted in accounts
-
+### See local variables of opted in accounts
 ```txt
 goal app read --local --from $ACCOUNT_2 --app-id $APP_ID
 ```
 
-#### Add new data contributor
-
-to add a new data contributor, the account to be added in needs to be opted into
-
+## Functional Calls
+### Add new data contributor
+To add a new data contributor, the account to be added in needs to be opted into
 - the smart contract (APP_ID)
 - the contributor token (CONTRIB_ID)
   and then the smart contract can be instructed to add an new contributor
 
 1. optin to application
-
 ```txt
 goal app optin \
  --app-id $APP_ID \
  --from $ACCOUNT_2 \
 ```
-
 2. optin transaction to the asset id of the data contributor token
-
 ```txt
 goal asset optin \
  --assetid $CONTRIB_ID \
  -a $ACCOUNT_2 \
 ```
-
 3. instruction from creators account to the smart contract to "add_contributor",
    NB have to specifiy asset in the transaction instruction
    NB have to specifiy the amount of rows of data being added to the pool
-
 ```txt
 goal app call \
    --app-id $APP_ID \
@@ -89,10 +98,8 @@ goal app call \
    --foreign-asset $CONTRIB_ID \
 ```
 
-#### Update data package
-
-transaction to update the data package of the smart contract, only executed from creators address
-
+### Update data package
+Transaction to update the data package of the smart contract, only executed from creators address
 ```txt
 goal app call \
  --app-id $APP_ID \
@@ -101,10 +108,8 @@ goal app call \
     --app-arg "str:SVCAJHVSC--UPDATED_PACKAGE---DHBSU#$" \
 ```
 
-#### Create DRT
-
-transaction to create a DRT, specify name, amount, note ( if needed ), exchange price i.e. 3000000 MicroAlgos = 3 Algos.
-
+### Create Digital Right Token (DRT)
+Transaction to create a DRT, specify name, amount, note ( if needed ), exchange price i.e. 3000000 MicroAlgos = 3 Algos.
 ```txt
 goal app call \
  --app-id $APP_ID \
@@ -116,9 +121,8 @@ goal app call \
  --app-arg "int:3000000" \
 ```
 
-#### Update DRT Price
-
-transaction to update the price of a DRT, need to submit the asset ID and the new price
+### Update DRT Price
+Transaction to update the price of a DRT, need to submit the asset ID and the new price
 
 ```txt
 goal app call \
@@ -129,15 +133,14 @@ goal app call \
  --foreign-asset 125 \
 ```
 
-#### Purchase DRT
+### Purchase DRT
+- Txn 1. user opts in to asset
+- Group Txn:
+  * txn 1. call contract
+  * txn 2. (inner) contract sends NFT
+  * txn 3. user pays
 
-- txn 1. user opts in to asset
-- Group tx 1:
-  - txn 1. call contract
-  - txn 2. (inner) contract sends NFT
-  - txn 3. user pays
-
-1. txn 1
+1. Txn 1
 
 ```txt
 goal asset optin \
@@ -145,10 +148,8 @@ goal asset optin \
  -a $ACCOUNT_NAUT \
 ```
 
-2. txn 2 (group transaction), the transaction will only be successfull if all individual transactions in the group are successful.
-
-- creation group transaction 1
-
+2. Group Txn, the transaction will only be successfull if all individual transactions in the group are successful.
+- txn 1
 ```txt
 goal app call \
  --app-id $APP_ID \
@@ -159,8 +160,7 @@ goal app call \
     --out txnAppCall.tx
 ```
 
-2. create group transaction 2
-
+- txn 2 & 3
 ```txt
 goal clerk send \
     -a 6000000 \
@@ -168,30 +168,22 @@ goal clerk send \
  -f "$ACCOUNT_NAUT" \
  --out txnPayment.tx
 ```
-
-join the transactions
-
+Join the transactions
 ```txt
 cat txnAppCall.tx txnPayment.tx > buyCombinedTxns.tx
 goal clerk group -i buyCombinedTxns.tx -o buyGroupedTxns.tx
 ```
-
-sign group transaction
-
+Sign group transaction
 ```txt
 goal clerk sign -i buyGroupedTxns.tx -o signoutbuy.tx
 ```
-
-send transaction
-
+Send transaction
 ```txt
 goal clerk rawsend -f signoutbuy.tx
 ```
 
-#### Claim fees
-
-transaction to for a data contributors to claim their fees, need the asset ID of the contributor token
-
+### Claim fees
+Transaction to for data contributors to claim their fees, need the asset ID of the contributor token
 ```txt
 goal app call \
  --app-id $APP_ID \
