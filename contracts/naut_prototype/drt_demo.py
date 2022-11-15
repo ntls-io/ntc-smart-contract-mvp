@@ -77,7 +77,7 @@ def approval():
 
         return Seq(      
             InnerTxnBuilder.Begin(),
-            InnerTxnBuilder.SetFields( #python dictionariy
+            InnerTxnBuilder.SetFields( 
                 {
                     TxnField.type_enum: TxnType.AssetConfig, #transaction type
                     TxnField.config_asset_total: btoi_amount,
