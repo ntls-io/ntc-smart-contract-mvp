@@ -394,9 +394,14 @@ def approval():
             Return (l_size*(g_average - l_average))
         )
 
+# Check the transaction type and execute the corresponding code
+# 1. If smart contract does not exist it will trigger the initialisation sequence contained in the "init" variable.
+# 2. An Optin transaction is simply approved.
+# 3. If the transaction type is a NoOp transaction, i.e. an Application Call, then it checks the first argument of the call which must be equal to one of the method call variables
+# "op_create_drt", "op_update_data_package", "op_contributor_token", "op_new_contributor", "op_update_drt_price", "op_update_drt_price", 
+# "op_buy_drt", "op_claim_fees".
     return program.event(
-        
-        init=Seq( #if statement to determine what type of transaction this is. init is triggered when the smart contract is created/initialised
+        init=Seq( 
             [
                 # Store nautilus company wallet address 
                 App.globalPut(global_company_wallet_address, Txn.accounts[1]), 
@@ -414,7 +419,8 @@ def approval():
             Approve(),
         ),
         no_op=Seq(
-            Cond( #condtion expression
+            # Condition expression
+            Cond( 
                 [
                     Txn.application_args[0] == op_create_drt,
                     create_drt(),
