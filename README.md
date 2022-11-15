@@ -71,7 +71,8 @@ goal app read --local --from $ACCOUNT_2 --app-id $APP_ID
 To add a new data contributor, the account to be added needs to be opted into:
 - the smart contract (APP_ID)
 - and, the contributor token (CONTRIB_ID)
-  folling this the smart contract can then be instructed to add a new contributor.
+
+Following this the smart contract can then be instructed to add a new contributor.
 
 1. optin to application
 ```txt
