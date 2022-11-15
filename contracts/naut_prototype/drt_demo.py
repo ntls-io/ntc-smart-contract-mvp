@@ -11,28 +11,28 @@ CONTRIBUTOR_UNIT_NAME = Bytes("DRT_C") #came up with this by myself, need to con
 DEFAULT_NOTE= Bytes("")
 
 def approval():
-    #globals
-    global_data_package_hash = Bytes("data_package_hash") 
-    global_company_wallet_address = Bytes("company_wallet_address") 
-    global_contributor_asset_id = Bytes("global_contributor_asset_id")
-    global_drt_counter= Bytes("drt_counter")
-    global_drt_payment_row_average = Bytes("drt_payment_row_average")
-    global_dataset_total_rows = Bytes("dataset_total_rows")
-    global_total_fees = Bytes("total_fees")
+    # Stored global variables
+    global_data_package_hash = Bytes("data_package_hash")               # The hash of the data pool
+    global_company_wallet_address = Bytes("company_wallet_address")     # The account of the nautilus wallet   
+    global_contributor_asset_id = Bytes("global_contributor_asset_id")  # Asset ID of contributor token
+    global_drt_counter= Bytes("drt_counter")                            # Counter of available DRTs
+    global_drt_payment_row_average = Bytes("drt_payment_row_average")   # Computational variable for royalty fees
+    global_dataset_total_rows = Bytes("dataset_total_rows")             # Computational variable for royalty fees
+    global_total_fees = Bytes("total_fees")                             # Current total fees available
     
-    #locals
-    local_rows_contributed = Bytes("rows_contributed")
-    local_g_drt_payment_row_average = Bytes("g_drt_payment_row_average")
-    local_no_times_contributed = Bytes("no_times_contributed")
+    # Stored local variables
+    local_rows_contributed = Bytes("rows_contributed")                  # Computational variable for royalty fees 
+    local_g_drt_payment_row_average = Bytes("g_drt_payment_row_average")# Computational variable for royalty fees
+    local_no_times_contributed = Bytes("no_times_contributed")          # No. times contributed to pool
  
-    #operations
-    op_create_drt = Bytes("create_drt") 
-    op_update_data_package = Bytes("update_data_package") 
-    op_contributor_token = Bytes("contributor_token") 
-    op_new_contributor = Bytes("add_contributor")
-    op_update_drt_price = Bytes("update_drt_price")
-    op_buy_drt = Bytes("buy_drt")
-    op_claim_fees = Bytes("claim_fees")
+    # Methods
+    op_create_drt = Bytes("create_drt")                                 # Method call
+    op_update_data_package = Bytes("update_data_package")               # Method call
+    op_contributor_token = Bytes("contributor_token")                   # Method call
+    op_new_contributor = Bytes("add_contributor")                       # Method call   
+    op_update_drt_price = Bytes("update_drt_price")                     # Method call
+    op_buy_drt = Bytes("buy_drt")                                       # Method call
+    op_claim_fees = Bytes("claim_fees")                                 # Method call
     
     @Subroutine(TealType.none)
     def defaultTransactionChecks(txnId: Expr):
