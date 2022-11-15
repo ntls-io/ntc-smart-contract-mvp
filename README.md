@@ -68,10 +68,10 @@ goal app read --local --from $ACCOUNT_2 --app-id $APP_ID
 
 ## Functional Calls
 ### Add new data contributor
-To add a new data contributor, the account to be added in needs to be opted into
+To add a new data contributor, the account to be added needs to be opted into:
 - the smart contract (APP_ID)
-- the contributor token (CONTRIB_ID)
-  and then the smart contract can be instructed to add an new contributor
+- and, the contributor token (CONTRIB_ID)
+  folling this the smart contract can then be instructed to add a new contributor.
 
 1. optin to application
 ```txt
