@@ -39,7 +39,7 @@ $ source /data/script_creation.sh
 ```
 5. In sandbox, run example
 ```txt
-$ source /data/contracts/naut_prototype/test.sh 
+$ source /data/test.sh 
 ```
 
 # Smart Contract Calls 
