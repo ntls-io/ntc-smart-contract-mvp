@@ -45,6 +45,7 @@ $ source /data/test.sh
 # Smart Contract Calls 
 
 ## General Calls
+These are general calls made to your sandboxed algorand lockchain using the `goal` cli. Please enter the sandbox to execute these commands.
 ### See global variables of smart contract
 ```txt
 goal app read --global --app-id $APP_ID --guess-format
