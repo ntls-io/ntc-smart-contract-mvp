@@ -398,19 +398,20 @@ def approval():
         
         init=Seq( #if statement to determine what type of transaction this is. init is triggered when the smart contract is created/initialised
             [
-                #App.globalPut(global_data_package_hash, Txn.application_args[0]), #put data package hash in global.... 
-                App.globalPut(global_company_wallet_address, Txn.accounts[1]), #put nautilus enclave wallet address in global.... 
+                # Store nautilus company wallet address 
+                App.globalPut(global_company_wallet_address, Txn.accounts[1]), 
+                # Initialise global variables
                 App.globalPut(global_drt_counter, Int(0)),
                 App.globalPut(global_drt_payment_row_average, Int(0)),
                 App.globalPut(global_dataset_total_rows, Int(0)), 
                 App.globalPut(global_total_fees, Int(0)),
                 App.globalPut(global_data_package_hash, Bytes("")),
-                Approve(), #then approve. 
+                # Then approve.
+                Approve(), 
             ]
         ),
         opt_in=Seq( 
-            
-            Approve(), # then approve
+            Approve(),
         ),
         no_op=Seq(
             Cond( #condtion expression
@@ -442,7 +443,6 @@ def approval():
                     Txn.application_args[0] == op_claim_fees,
                     claim_royalty(Txn.sender(), Txn.assets[0]),
                 ],
-
             ),
             Reject(),
         ),
