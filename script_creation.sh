@@ -27,19 +27,21 @@ goal app create \
     --local-ints 3 \
     --extra-pages 1 \
     --app-account $ACCOUNT_NAUT \
-    --fee 2000 |
+    --fee 2000000 |
     grep Created |
     awk '{ print $6 }'
 )
 echo ""
 echo "Store Smart Contract variables."
 echo "APPLICATION ID of Smart Contract: APP_ID=$APP_ID"  
-# second will be to fund the smart contract with minimum amount of algos - 2000
-# but first you need to set the  ACCOUNT_APP to point to the account address of the newly created smart contract.
-# to get the smart contract account use the following
 export ACCOUNT_APP=$(goal app info  --app-id "$APP_ID" | awk '{print $3}' | head -2 | tail -1)
 
 echo "APPLICATION ADDRESS of Smart Contract: ACCOUNT_APP=$ACCOUNT_APP" 
+echo ""
+# second will be to fund the smart contract with minimum amount of algos - 2000
+# but first you need to set the  ACCOUNT_APP to point to the account address of the newly created smart contract.
+# to get the smart contract account use the following
+
 echo ""
 echo "Optin to Smart Contract"
 goal app optin \
@@ -61,11 +63,10 @@ goal app call \
     --app-id $APP_ID \
     -f $ACCOUNT_1 \
     --app-arg "str:contributor_token" \
-    #--app-arg "int:5" \
 
-echo ""
 export CONTRIB_ID=$(goal app read --global --app-id $APP_ID --guess-format | awk '{print $2}' | head -20 | tail -1)
 echo "Store contributor token ID: CONTRIB_ID=$CONTRIB_ID"
+
 echo ""
 echo "Optin to contributor token"
 

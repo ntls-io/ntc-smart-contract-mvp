@@ -170,7 +170,7 @@ def approval():
             Approve(),
         )
 
-#function to create the contributor token
+# function to create the contributor token
     @Subroutine(TealType.none)
     def create_contributor_token():
         asset_id = ScratchVar()
@@ -179,26 +179,23 @@ def approval():
             #basic sanity checks
             defaultTransactionChecks(Int(0)),
             program.check_self(
-                group_size=Int(1), #ensure 1 transaction
+                group_size=Int(1), 
                 group_index=Int(0),
             ),
             program.check_rekey_zero(1),
             Assert(
                 And(
                     Txn.sender() == Global.creator_address(), #ensure transaction sender is the smart contract creator
-                    contrib_exist == Int(0) #ensure there is not already a data contributor
+                    contrib_exist == Int(0) #ensure there is not already a data contributor token created
                 )
             ),
             asset_id.store(inner_asset_create_txn(Bytes("DRT_Contributor"),CONTRIBUTOR_UNIT_NAME ,Bytes("1000"), DRT_ASSET_URL ,DEFAULT_NOTE)), #use scratch variable to store asset id of contributor token
-            App.globalPut(global_contributor_asset_id,asset_id.load()), #store asset id in gloabl variable
-            # App.localPut(Txn.sender(),local_g_drt_payment_row_average, App.globalGet(global_drt_payment_row_average)),       
-            # App.localPut(Txn.sender(),local_rows_contributed, Btoi(Txn.application_args[1]) ),
-            # App.localPut(Txn.sender(),local_no_times_contributed, Int(0)),
-            #App.globalPut(global_dataset_total_rows, Btoi(Txn.application_args[1])),
+            #store asset id in gloabl variable
+            App.globalPut(global_contributor_asset_id,asset_id.load()), 
             Approve(),
         )
 
-#function to transfer contributor token
+# function to transfer contributor token
     @Subroutine(TealType.none)
     def add_new_contributor(added_account: Expr, asset_id: Expr):
         accountAssetBalance = AssetHolding.balance(added_account, asset_id)
@@ -210,10 +207,9 @@ def approval():
             accountAssetBalance,
             #basic santiy checks
             defaultTransactionChecks(Int(0)),
-            #defaultTransactionChecks(Int(1)),
             program.check_self(
-                # group_size=Int(1), #ensure 1 transaction
-                # group_index=Int(0),
+                 group_size=Int(1), #ensure 1 transaction
+                 group_index=Int(0),
             ),
             program.check_rekey_zero(1),
             Assert(
@@ -240,9 +236,9 @@ def approval():
             If(And(creator_times_contributed == Int(0), App.globalGet(global_dataset_total_rows) == Int(0)))
             .Then( 
                   inner_asset_transfer_txn(asset_id, Int(1), Global.creator_address()),
-                  App.localPut(Txn.sender(), local_no_times_contributed, Int(1)),
-                  App.localPut(Txn.sender(),local_g_drt_payment_row_average, App.globalGet(global_drt_payment_row_average)),       
-                  App.localPut(Txn.sender(),local_rows_contributed, new_rows ),
+                  App.localPut(Global.creator_address(), local_no_times_contributed, Int(1)),
+                  App.localPut(Global.creator_address(),local_g_drt_payment_row_average, App.globalGet(global_drt_payment_row_average)),       
+                  App.localPut(Global.creator_address(),local_rows_contributed, new_rows ),
                   App.globalPut(global_dataset_total_rows, new_rows),
                   App.globalPut(global_data_package_hash, new_hash),
                   Approve(),
@@ -328,7 +324,6 @@ def approval():
             Approve(),
         )
    
-
 # Function to buy a created DRT, incorporates the inner_asset_create_txn function
     @Subroutine(TealType.none)
     def buy_drt():
@@ -403,6 +398,14 @@ def approval():
     return program.event(
         init=Seq( 
             [
+                Assert(
+                    # Check if it's an application call
+                    Txn.type_enum() == TxnType.ApplicationCall,
+                    # Check the arguments length
+                    Txn.application_args.length() == Int(0),
+                    # Check the accounts length 
+                    Txn.accounts.length() == Int(1),
+                    ),                  
                 # Store nautilus company wallet address 
                 App.globalPut(global_company_wallet_address, Txn.accounts[1]), 
                 # Initialise global variables
@@ -415,7 +418,9 @@ def approval():
                 Approve(), 
             ]
         ),
-        opt_in=Seq( 
+        opt_in=Seq(
+            #ensure the creator has opted before others opt in.
+            Assert(App.optedIn(Global.creator_address(), Global.current_application_id())),
             Approve(),
         ),
         no_op=Seq(
@@ -430,12 +435,12 @@ def approval():
                     update_data_package(),
                 ],
                 [
-                    Txn.application_args[0] == op_contributor_token,
-                    create_contributor_token(),
-                ],
-                [
                     Txn.application_args[0] == op_new_contributor,
                     add_new_contributor(Txn.accounts[1], Txn.assets[0]),
+                ],
+                [
+                    Txn.application_args[0] == op_contributor_token,
+                    create_contributor_token(),
                 ],
                 [
                     Txn.application_args[0] == op_update_drt_price,
