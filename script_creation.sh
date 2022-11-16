@@ -25,12 +25,11 @@ goal app create \
     --global-ints 55 \
     --local-byteslices 2 \
     --local-ints 3 \
-    --extra-pages 1 \
-    --app-account $ACCOUNT_NAUT \
-    --fee 2000000 |
+    --app-account $ACCOUNT_NAUT |
     grep Created |
     awk '{ print $6 }'
 )
+
 echo ""
 echo "Store Smart Contract variables."
 echo "APPLICATION ID of Smart Contract: APP_ID=$APP_ID"  
