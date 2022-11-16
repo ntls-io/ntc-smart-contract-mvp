@@ -33,14 +33,13 @@ goal app create \
 echo ""
 echo "Store Smart Contract variables."
 echo "APPLICATION ID of Smart Contract: APP_ID=$APP_ID"  
+
+# second will be to fund the smart contract with minimum amount of algos - 200000
+# but first you need to set the  ACCOUNT_APP to point to the account address of the newly created smart contract.
+# to get the smart contract account use the following
 export ACCOUNT_APP=$(goal app info  --app-id "$APP_ID" | awk '{print $3}' | head -2 | tail -1)
 
 echo "APPLICATION ADDRESS of Smart Contract: ACCOUNT_APP=$ACCOUNT_APP" 
-echo ""
-# second will be to fund the smart contract with minimum amount of algos - 2000
-# but first you need to set the  ACCOUNT_APP to point to the account address of the newly created smart contract.
-# to get the smart contract account use the following
-
 echo ""
 echo "Optin to Smart Contract"
 goal app optin \
