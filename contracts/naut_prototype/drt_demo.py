@@ -1,14 +1,13 @@
-from typing import TypeVar
 from pyteal import *
 from pyteal.ast.bytes import Bytes
 from pyteal_helpers import program
 from pyteal_helpers.strings import itoa
-from algosdk.future.transaction import StateSchema
 
 DRT_UNIT_NAME = Bytes("DRT") #need to confirm
-DRT_ASSET_URL = Bytes("https://gold.rush") #this is just for testing... 
 CONTRIBUTOR_UNIT_NAME = Bytes("DRT_C") #came up with this by myself, need to confirm
+DEFAULT_HASH = Bytes("base64", "y9OJ5MRLCHQj8GqbikAUKMBI7hom+SOj8dlopNdNHXI=")
 DEFAULT_NOTE= Bytes("")
+DEFAULT_URL= Bytes("")
 
 def approval():
     # Stored global variables
@@ -71,7 +70,7 @@ def approval():
 
 # inner trasnction to create the DRT as an ASA
     @Subroutine(TealType.uint64)
-    def inner_asset_create_txn(name: Expr, unit_name: Expr, amount: Expr, asset_url: Expr, note: Expr):
+    def inner_asset_create_txn(name: Expr, unit_name: Expr, amount: Expr, asset_url: Expr, binHash: Expr, note: Expr):
         #convert to pyteal uint64
         btoi_amount = Btoi(amount)
 
@@ -85,6 +84,7 @@ def approval():
                     TxnField.config_asset_unit_name: unit_name,
                     TxnField.config_asset_name: name,
                     TxnField.config_asset_url: asset_url,
+                    TxnField.config_asset_metadata_hash: binHash,
                     TxnField.config_asset_manager: Global.current_application_address(),
                     TxnField.config_asset_reserve: Global.current_application_address(),
                     TxnField.note: note,
@@ -155,15 +155,16 @@ def approval():
                     #ensure the transaction sender is the data_creator , i.e. the creator of the smart contract
                     Txn.sender() == Global.creator_address(),
                     #ensure there is less than 50 drt counter
-                    App.globalGet(global_drt_counter) < Int(50)
+                    App.globalGet(global_drt_counter) < Int(50),
                     #ensure there is atleast 2 arguments
-                    #Txn.application_args.length() == Int(3), #ensure there is, amount, name, hash of database schema, hash of binary
+                    Txn.application_args.length() == Int(7), # instruction, name, amount, url of binary, hash of binary, note, exchange price
                 )
             ),
             #create drt and record asset id
-            asset_id.store(inner_asset_create_txn(Txn.application_args[1],DRT_UNIT_NAME ,Txn.application_args[2], DRT_ASSET_URL ,Txn.application_args[3])),
+            #name: Expr, unit_name: Expr, amount: Expr, asset_url: Expr, binHash: Expr, note: Expr
+            asset_id.store(inner_asset_create_txn(Txn.application_args[1],DRT_UNIT_NAME ,Txn.application_args[2], Txn.application_args[3] ,Txn.application_args[4], Txn.application_args[5])),
             #store DRT price in contract alongside asset id in globals
-            exchange_rate.store(Btoi(Txn.application_args[4])),
+            exchange_rate.store(Btoi(Txn.application_args[6])),
             App.globalPut(itoa(asset_id.load()),exchange_rate.load()),
             #incremement counter
             App.globalPut(global_drt_counter, App.globalGet(global_drt_counter) + Int(1)),
@@ -189,7 +190,8 @@ def approval():
                     contrib_exist == Int(0) #ensure there is not already a data contributor token created
                 )
             ),
-            asset_id.store(inner_asset_create_txn(Bytes("DRT_Contributor"),CONTRIBUTOR_UNIT_NAME ,Bytes("1000"), DRT_ASSET_URL ,DEFAULT_NOTE)), #use scratch variable to store asset id of contributor token
+            #name: Expr, unit_name: Expr, amount: Expr, asset_url: Expr, binHash: Expr, note: Expr
+            asset_id.store(inner_asset_create_txn(Txn.application_args[1],CONTRIBUTOR_UNIT_NAME ,Txn.application_args[2], DEFAULT_URL , DEFAULT_HASH, DEFAULT_NOTE)), #use scratch variable to store asset id of contributor token
             #store asset id in gloabl variable
             App.globalPut(global_contributor_asset_id,asset_id.load()), 
             Approve(),
@@ -200,7 +202,7 @@ def approval():
     def add_new_contributor(added_account: Expr, asset_id: Expr):
         accountAssetBalance = AssetHolding.balance(added_account, asset_id)
         new_rows = Btoi(Txn.application_args[1])
-        creator_times_contributed = App.localGet(Global.creator_address(),local_no_times_contributed)
+        creator_times_contributed = App.localGet(Txn.sender(),local_no_times_contributed)
         royalty_fee = compute_royalty_fee(added_account)
         new_hash = Txn.application_args[2]
         return Seq(
@@ -233,18 +235,18 @@ def approval():
                 )
             ),
             #part of the smart contract initialisation
-            If(And(creator_times_contributed == Int(0), App.globalGet(global_dataset_total_rows) == Int(0)))
+            If(And(creator_times_contributed == Int(0), App.globalGet(global_dataset_total_rows) == Int(0), added_account == Global.creator_address()))
             .Then( 
-                  inner_asset_transfer_txn(asset_id, Int(1), Global.creator_address()),
-                  App.localPut(Global.creator_address(), local_no_times_contributed, Int(1)),
-                  App.localPut(Global.creator_address(),local_g_drt_payment_row_average, App.globalGet(global_drt_payment_row_average)),       
-                  App.localPut(Global.creator_address(),local_rows_contributed, new_rows ),
+                  inner_asset_transfer_txn(asset_id, Int(1), Txn.sender()),
+                  App.localPut(Txn.sender(), local_no_times_contributed, Int(1)),
+                  App.localPut(Txn.sender(),local_g_drt_payment_row_average, App.globalGet(global_drt_payment_row_average)),       
+                  App.localPut(Txn.sender(),local_rows_contributed, new_rows ),
                   App.globalPut(global_dataset_total_rows, new_rows),
                   App.globalPut(global_data_package_hash, new_hash),
                   Approve(),
                   )
             #post initialisation
-            .ElseIf(creator_times_contributed > Int(0))
+            .ElseIf(And(creator_times_contributed > Int(0), added_account != Global.creator_address()))
             .Then(
                 App.localPut(added_account,local_g_drt_payment_row_average, App.globalGet(global_drt_payment_row_average)),       
                 App.localPut(added_account,local_rows_contributed, (Btoi(Txn.application_args[1]) + App.localGet(added_account, local_rows_contributed))),
@@ -419,8 +421,6 @@ def approval():
             ]
         ),
         opt_in=Seq(
-            #ensure the creator has opted before others opt in.
-            Assert(App.optedIn(Global.creator_address(), Global.current_application_id())),
             Approve(),
         ),
         no_op=Seq(

@@ -24,7 +24,7 @@ goal app create \
     --global-byteslices 3 \
     --global-ints 55 \
     --local-byteslices 2 \
-    --local-ints 3 \
+    --local-ints 4 \
     --app-account $ACCOUNT_NAUT |
     grep Created |
     awk '{ print $6 }'
@@ -61,6 +61,8 @@ goal app call \
     --app-id $APP_ID \
     -f $ACCOUNT_1 \
     --app-arg "str:contributor_token" \
+    --app-arg "str:DRT_Contributor" \
+    --app-arg "int:10000" \
 
 export CONTRIB_ID=$(goal app read --global --app-id $APP_ID --guess-format | awk '{print $2}' | head -20 | tail -1)
 echo "Store contributor token ID: CONTRIB_ID=$CONTRIB_ID"
