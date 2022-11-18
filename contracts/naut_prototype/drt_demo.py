@@ -142,6 +142,7 @@ def approval():
     def create_drt():
         asset_id = ScratchVar()
         exchange_rate=ScratchVar()
+        creator_times_contributed = App.localGet(Txn.sender(),local_no_times_contributed)
         return Seq(
             #basic sanity checks
             defaultTransactionChecks(Int(0)),
@@ -158,6 +159,8 @@ def approval():
                     App.globalGet(global_drt_counter) < Int(50),
                     #ensure there is atleast 2 arguments
                     Txn.application_args.length() == Int(7), # instruction, name, amount, url of binary, hash of binary, note, exchange price
+                    #ensure the creator has contributed, i.e. there is data to create a drt from
+                    creator_times_contributed == Int(1),
                 )
             ),
             #create drt and record asset id
