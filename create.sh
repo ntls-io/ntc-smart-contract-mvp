@@ -6,11 +6,11 @@ echo "Set configuration variables"
 
 export ACCOUNT_1=$(goal account list | awk '{print $3}' | head -1 | tail -1)
 export ACCOUNT_2=$(goal account list | awk '{print $3}' | head -2 | tail -1)
-export ACCOUNT_NAUT=$(goal account list | awk '{print $3}' | head -3 | tail -1)
+export ACCOUNT_ENCLAVE=$(goal account list | awk '{print $3}' | head -3 | tail -1)
 
 echo "ACCOUNT_1=$ACCOUNT_1"
 echo "ACCOUNT_2=$ACCOUNT_2"
-echo "ACCOUNT_NAUT=$ACCOUNT_NAUT"
+echo "ACCOUNT_ENCLAVE=$ACCOUNT_ENCLAVE"
 echo ""
 #first you need to deploy the smart contract.
 # the first transaction will be to initialise the smart contract
@@ -25,7 +25,7 @@ goal app create \
     --global-ints 55 \
     --local-byteslices 2 \
     --local-ints 4 \
-    --app-account $ACCOUNT_NAUT |
+    --app-account $ACCOUNT_ENCLAVE |
     grep Created |
     awk '{ print $6 }'
 )
@@ -55,19 +55,28 @@ goal clerk send \
     -f "$ACCOUNT_1" \
 
 echo ""
-echo "Call smart contract to create contributor token"
+
 # the third will be to instruct the smart contract to create the contributor token
+echo "Call smart contract to create contributor and append token"
 goal app call \
     --app-id $APP_ID \
     -f $ACCOUNT_1 \
-    --app-arg "str:contributor_token" \
+    --app-arg "str:contributor_append_token" \
     --app-arg "str:DRT_Contributor" \
+    --app-arg "str:DRT_C" \
     --app-arg "int:10000" \
+    --app-arg "str:Append_DRT" \
+    --app-arg "str:DRT" \
+    --app-arg "int:1000000"
+    
 
-export CONTRIB_ID=$(goal app read --global --app-id $APP_ID --guess-format | awk '{print $2}' | head -20 | tail -1)
+export CONTRIB_ID=$(goal app read --global --app-id $APP_ID --guess-format | awk '{print $2}' | head -28 | tail -1)
 echo "Store contributor token ID: CONTRIB_ID=$CONTRIB_ID"
 
 echo ""
+export APPEND_ID=$(goal app read --global --app-id $APP_ID --guess-format | awk '{print $2}' | head -24 | tail -1)
+echo "Store append DRT token ID: APPEND_ID=$APPEND_ID"
+
 echo "Optin to contributor token"
 
 goal asset optin \
@@ -75,16 +84,17 @@ goal asset optin \
     -a $ACCOUNT_1 \
 
 echo ""
-echo "Add smart contract creator as a data contributor"
+echo "Add smart contract creator as a data contributor for initialisation, add data package hash"
 
 goal app call \
     --app-id $APP_ID \
      -f $ACCOUNT_1 \
-    --app-arg "str:add_contributor" \
+    --app-arg "str:add_creator_as_contributor" \
     --app-arg "int:5" \
     --app-arg "str:DGVWUSNA--DATA_PACKAGE_HASH--ASUDBQ" \
     --app-account $ACCOUNT_1 \
     --foreign-asset $CONTRIB_ID \
     
 echo ""
+
 echo "Smart Contract creation complete."

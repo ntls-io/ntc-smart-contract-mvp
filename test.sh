@@ -25,21 +25,21 @@ echo ""
 echo "Account Naut purhases DRT..."
 goal asset optin \
     --assetid $ASSET_ID \
-    -a $ACCOUNT_NAUT \
+    -a $ACCOUNT_2 \
 
 
 goal app call \
     --app-id $APP_ID \
-    -f $ACCOUNT_NAUT \
+    -f $ACCOUNT_2 \
     --app-arg "str:buy_drt" \
     --app-arg "int:1" \
-    --foreign-asset $ASSET_ID \
+    --foreign-asset $Append_DRT \
     --out txnAppCall.tx
 
 goal clerk send \
     -a 3000000 \
     -t "$ACCOUNT_APP" \
-    -f "$ACCOUNT_NAUT" \
+    -f "$ACCOUNT_2" \
     --out txnPayment.tx
 
 cat txnAppCall.tx txnPayment.tx > buyCombinedTxns.tx
