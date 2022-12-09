@@ -12,8 +12,9 @@ DEFAULT_URL= Bytes("")
 def approval():
     # Stored global variables
     global_data_package_hash = Bytes("data_package_hash")               # The hash of the data pool
-    global_company_wallet_address = Bytes("company_wallet_address")     # The account of the nautilus wallet   
+    global_enclave_address = Bytes("enclave_address")                   # The account of the nautilus wallet   
     global_contributor_asset_id = Bytes("global_contributor_asset_id")  # Asset ID of contributor token
+    global_append_asset_id = Bytes("global_append_asset_id")            # Asset ID of append token
     global_drt_counter= Bytes("drt_counter")                            # Counter of available DRTs
     global_drt_payment_row_average = Bytes("drt_payment_row_average")   # Computational variable for royalty fees
     global_dataset_total_rows = Bytes("dataset_total_rows")             # Computational variable for royalty fees
@@ -27,11 +28,13 @@ def approval():
     # Methods
     op_create_drt = Bytes("create_drt")                                 # Method call
     op_update_data_package = Bytes("update_data_package")               # Method call
-    op_contributor_token = Bytes("contributor_token")                   # Method call
-    op_new_contributor = Bytes("add_contributor")                       # Method call   
+    op_contributor_append_token = Bytes("contributor_append_token")     # Method call
+    op_creator_contribution = Bytes("add_creator_as_contributor")       # Method call   
     op_update_drt_price = Bytes("update_drt_price")                     # Method call
     op_buy_drt = Bytes("buy_drt")                                       # Method call
     op_claim_fees = Bytes("claim_fees")                                 # Method call
+    op_append_drt = Bytes("add_data_contributor")                       # Method call
+    op_add_creator_contribution = Bytes("creator_data_validation_add")  # Method call
     
     @Subroutine(TealType.none)
     def defaultTransactionChecks(txnId: Expr):
@@ -112,6 +115,27 @@ def approval():
             InnerTxnBuilder.Submit()
         ])
 
+# function to update the global variable - global_drt_payment_row_average
+    @Subroutine(TealType.uint64)
+    def compute_global_drt_payment_row_average(g_n__1: Expr, l_n: Expr, v_n: Expr):
+        return Seq(
+            Assert(
+                g_n__1 == App.globalGet(global_drt_payment_row_average), 
+            ),
+            
+            Return (Div(v_n,l_n) + g_n__1)
+        )
+        
+ # function to compute the royalty fee
+    @Subroutine(TealType.uint64)
+    def compute_royalty_fee(acc: Expr):
+        l_size = App.localGet(acc, local_rows_contributed)
+        l_average = App.localGet(acc, local_g_drt_payment_row_average)
+        g_average = App.globalGet(global_drt_payment_row_average)
+        return Seq(
+            Return (l_size*(g_average - l_average))
+        )
+
 # function to update the global variable to a new data package hash. 
     @Subroutine(TealType.none)
     def update_data_package():
@@ -174,11 +198,14 @@ def approval():
             Approve(),
         )
 
-# function to create the contributor token
+# init function to create the contributor token
     @Subroutine(TealType.none)
-    def create_contributor_token():
-        asset_id = ScratchVar()
+    def init_create_contributor_append():
+        contrib_id = ScratchVar()
+        append_id = ScratchVar()
         contrib_exist = App.globalGet(global_contributor_asset_id)
+        append_exist = App.globalGet(global_append_asset_id)
+        btoi_rate = Btoi(Txn.application_args[6])
         return Seq(
             #basic sanity checks
             defaultTransactionChecks(Int(0)),
@@ -190,24 +217,32 @@ def approval():
             Assert(
                 And(
                     Txn.sender() == Global.creator_address(), #ensure transaction sender is the smart contract creator
-                    contrib_exist == Int(0) #ensure there is not already a data contributor token created
+                    contrib_exist == Int(0), #ensure there is not already a data contributor token created
+                    append_exist == Int(0),  #ensure there is not already append DRT created
                 )
             ),
             #name: Expr, unit_name: Expr, amount: Expr, asset_url: Expr, binHash: Expr, note: Expr
-            asset_id.store(inner_asset_create_txn(Txn.application_args[1],CONTRIBUTOR_UNIT_NAME ,Txn.application_args[2], DEFAULT_URL , DEFAULT_HASH, DEFAULT_NOTE)), #use scratch variable to store asset id of contributor token
+            contrib_id.store(inner_asset_create_txn(Txn.application_args[1],Txn.application_args[2] ,Txn.application_args[3], DEFAULT_URL , DEFAULT_HASH, DEFAULT_NOTE)), #use scratch variable to store asset id of contributor token
+            append_id.store(inner_asset_create_txn(Txn.application_args[4],Txn.application_args[5], Txn.application_args[3], DEFAULT_URL , DEFAULT_HASH, DEFAULT_NOTE)), #use scratch variable to store asset id of contributor token
+
+            
             #store asset id in gloabl variable
-            App.globalPut(global_contributor_asset_id,asset_id.load()), 
+            App.globalPut(global_contributor_asset_id,contrib_id.load()), 
+            App.globalPut(global_append_asset_id,append_id.load()), 
+            
+            #store new price
+            App.globalPut(itoa(append_id.load()),btoi_rate),
             Approve(),
         )
 
-# function to transfer contributor token
+# init function to add the creators data contributions
     @Subroutine(TealType.none)
-    def add_new_contributor(added_account: Expr, asset_id: Expr):
-        accountAssetBalance = AssetHolding.balance(added_account, asset_id)
-        new_rows = Btoi(Txn.application_args[1])
-        creator_times_contributed = App.localGet(Txn.sender(),local_no_times_contributed)
-        royalty_fee = compute_royalty_fee(added_account)
-        new_hash = Txn.application_args[2]
+    def init_add_creator_contribution(added_account: Expr, asset_id: Expr):
+        accountAssetBalance = AssetHolding.balance(added_account, asset_id) #check creator has opted into contributor
+        new_rows = Btoi(Txn.application_args[1]) #store rows of data to append
+        royalty_fee = compute_royalty_fee(added_account) #compute creator royalty fee
+        new_hash = Txn.application_args[2] #store the new data hash
+        creator_no_contributed = App.localGet(Txn.sender(),local_no_times_contributed)
         return Seq(
             accountAssetBalance,
             #basic santiy checks
@@ -235,30 +270,92 @@ def approval():
                     new_hash != App.globalGet(global_data_package_hash),
                     #ensure new hash not nothing
                     new_hash != Bytes(""),
+                    #ensure added account is creators address
+                    added_account == Global.creator_address(),
+                    #ensure creator has not already contributed
+                    creator_no_contributed == Int(0),
                 )
             ),
-            #part of the smart contract initialisation
-            If(And(creator_times_contributed == Int(0), App.globalGet(global_dataset_total_rows) == Int(0), added_account == Global.creator_address()))
-            .Then( 
-                  inner_asset_transfer_txn(asset_id, Int(1), Txn.sender()),
-                  App.localPut(Txn.sender(), local_no_times_contributed, Int(1)),
-                  App.localPut(Txn.sender(),local_g_drt_payment_row_average, App.globalGet(global_drt_payment_row_average)),       
-                  App.localPut(Txn.sender(),local_rows_contributed, new_rows ),
-                  App.globalPut(global_dataset_total_rows, new_rows),
-                  App.globalPut(global_data_package_hash, new_hash),
-                  Approve(),
-                  )
-            #post initialisation
-            .ElseIf(And(creator_times_contributed > Int(0), added_account != Global.creator_address()))
-            .Then(
-                App.localPut(added_account,local_g_drt_payment_row_average, App.globalGet(global_drt_payment_row_average)),       
-                App.localPut(added_account,local_rows_contributed, (Btoi(Txn.application_args[1]) + App.localGet(added_account, local_rows_contributed))),
-                App.localPut(added_account, local_no_times_contributed, (App.localGet(added_account, local_no_times_contributed)+Int(1))),
-                App.globalPut(global_data_package_hash, new_hash),
-                App.globalPut(global_dataset_total_rows, (new_rows + App.globalGet(global_dataset_total_rows))),
-                Approve(),
-                ),
+            #send contributor asset to creator
+            inner_asset_transfer_txn(asset_id, Int(1), Txn.sender()),
+        
+            # add contribution counter in local variable
+            App.localPut(added_account, local_no_times_contributed, Int(1)),           
+            # add new row average to local
+            App.localPut(Txn.sender(),local_g_drt_payment_row_average, App.globalGet(global_drt_payment_row_average)),    
+            # add no of rows contributed
+            App.localPut(added_account,local_rows_contributed, (Btoi(Txn.application_args[1]) + App.localGet(added_account, local_rows_contributed))),
+        
+            #update global hash 
+            App.globalPut(global_data_package_hash, new_hash),
+            #update global row counter
+            App.globalPut(global_dataset_total_rows, (new_rows + App.globalGet(global_dataset_total_rows))),
+
+            Approve(),
         )
+
+# function to add the creators data contributions after initialisation of pool, i.e. add more data a second time round.
+    @Subroutine(TealType.none)
+    def add_creator_contribution():
+        
+        accountAssetBalance = AssetHolding.balance(Txn.accounts[1], Txn.assets[0]) #check creator has opted into contributor and has a contributor token
+        royalty_fee = compute_royalty_fee(Txn.accounts[1]) #compute creator royalty fee
+        creator_no_contributed = App.localGet(Txn.accounts[1],local_no_times_contributed) #store no times contributed
+        
+        
+        new_rows = Btoi(Txn.application_args[1]) #store rows of data to append, gathered from enclave
+        new_hash = Txn.application_args[2] #store the new data hash, gathered from enclave
+        approved = Btoi(Txn.application_args[3]) #approved yes (1) or no (0)
+        
+        return Seq(
+            accountAssetBalance,
+            #basic santiy checks
+            defaultTransactionChecks(Int(0)),
+            program.check_self(
+                 group_size=Int(1), #ensure 2 transactions
+                 group_index=Int(0),
+            ),
+            program.check_rekey_zero(1),
+            Assert(
+                And(
+                    #check the sender of transaction 1 is the enclave address
+                    Txn.sender() == App.globalGet(global_enclave_address),
+                    #check the sender of transaction 2 is the enclave
+                    Txn.accounts[1] == Global.creator_address(),
+                    # #check it is approved
+                    approved == Int(1),
+                    # #check that the receiver of the token has opted in. 
+                    accountAssetBalance.hasValue(),
+                    #ensure asset provided is the same as contributor asset ID
+                    Txn.assets[0] == App.globalGet(global_contributor_asset_id),
+                    # #ensure there is atleast 4 arguments
+                    Txn.application_args.length() == Int(4),
+                    #check creator is still opted in 
+                    App.optedIn(Txn.accounts[1], Global.current_application_id()),
+                    #ensure royalty fee is zero for creator
+                    royalty_fee == Int(0),
+                    #ensure hashes are not the same
+                    new_hash != App.globalGet(global_data_package_hash),
+                    #ensure new hash not nothing
+                    new_hash != Bytes(""),
+                    #ensure creator has already contributed during initialisation
+                    creator_no_contributed > Int(0),
+                )
+            ),
+            # add contribution counter in local variable
+            App.localPut(Txn.accounts[1], local_no_times_contributed, (creator_no_contributed+Int(1))),       
+            # add new row average to local
+            App.localPut(Txn.accounts[1],local_g_drt_payment_row_average, App.globalGet(global_drt_payment_row_average)),    
+            # add no of rows contributed
+            App.localPut(Txn.accounts[1],local_rows_contributed, (new_rows + App.localGet(Txn.accounts[1], local_rows_contributed))),
+        
+            #update global hash 
+            App.globalPut(global_data_package_hash, new_hash),
+            #update global row counter
+            App.globalPut(global_dataset_total_rows, (new_rows + App.globalGet(global_dataset_total_rows))),
+            Approve(),
+        )
+
 
 # Function to update the global variable to a new data package hash. 
     @Subroutine(TealType.none)
@@ -282,7 +379,7 @@ def approval():
                     drt_exist.hasValue(),
                 )
             ),
-            #update data package to new hash
+            #store new price
             App.globalPut(itoa(Txn.assets[0]),btoi_rate),
 
             Approve(),
@@ -373,32 +470,27 @@ def approval():
             Approve(),
         )
 
-# function to update the global variable - global_drt_payment_row_average
-    @Subroutine(TealType.uint64)
-    def compute_global_drt_payment_row_average(g_n__1: Expr, l_n: Expr, v_n: Expr):
-        return Seq(
-            Assert(
-                g_n__1 == App.globalGet(global_drt_payment_row_average), 
-            ),
-            
-            Return (Div(v_n,l_n) + g_n__1)
-        )
-        
- # function to compute the royalty fee
-    @Subroutine(TealType.uint64)
-    def compute_royalty_fee(acc: Expr):
-        l_size = App.localGet(acc, local_rows_contributed)
-        l_average = App.localGet(acc, local_g_drt_payment_row_average)
-        g_average = App.globalGet(global_drt_payment_row_average)
-        return Seq(
-            Return (l_size*(g_average - l_average))
-        )
+# # Function to redeem the Append DRT [WIP]
+#     @Subroutine(TealType.none)
+#     def redeem_append_drt():
+#         return Seq(
+#             Assert(
+#                 And(
+#                     Gtxn[0].type_enum() == TxnType.AssetTransfer,
+#                     #Global.current_application_address() == Gtxn[0].receiver(), # check the reciever of the asset transfer is the smart cotnract
+                    
+#                 )
+#             ),
+#             App.globalPut(Bytes("Gtxn[0].receiver()"), Gtxn[0].amount()),
+#             Approve(),
+#         )
+
 
 # Check the transaction type and execute the corresponding code
 # 1. If smart contract does not exist it will trigger the initialisation sequence contained in the "init" variable.
 # 2. An Optin transaction is simply approved.
 # 3. If the transaction type is a NoOp transaction, i.e. an Application Call, then it checks the first argument of the call which must be equal to one of the method call variables
-# "op_create_drt", "op_update_data_package", "op_contributor_token", "op_new_contributor", "op_update_drt_price", "op_update_drt_price", 
+# "op_create_drt", "op_update_data_package", "op_contributor_append_token", "op_new_contributor", "op_update_drt_price", "op_update_drt_price", 
 # "op_buy_drt", "op_claim_fees".
     return program.event(
         init=Seq( 
@@ -412,7 +504,7 @@ def approval():
                     Txn.accounts.length() == Int(1),
                     ),                  
                 # Store nautilus company wallet address 
-                App.globalPut(global_company_wallet_address, Txn.accounts[1]), 
+                App.globalPut(global_enclave_address, Txn.accounts[1]), 
                 # Initialise global variables
                 App.globalPut(global_drt_counter, Int(0)),
                 App.globalPut(global_drt_payment_row_average, Int(0)),
@@ -438,12 +530,16 @@ def approval():
                     update_data_package(),
                 ],
                 [
-                    Txn.application_args[0] == op_new_contributor,
-                    add_new_contributor(Txn.accounts[1], Txn.assets[0]),
+                    Txn.application_args[0] == op_creator_contribution,
+                    init_add_creator_contribution(Txn.accounts[1], Txn.assets[0]),
                 ],
                 [
-                    Txn.application_args[0] == op_contributor_token,
-                    create_contributor_token(),
+                    Txn.application_args[0] == op_contributor_append_token,
+                    init_create_contributor_append(),
+                ],
+                 [
+                    Txn.application_args[0] == op_add_creator_contribution,
+                    add_creator_contribution(),
                 ],
                 [
                     Txn.application_args[0] == op_update_drt_price,
@@ -457,6 +553,10 @@ def approval():
                     Txn.application_args[0] == op_claim_fees,
                     claim_royalty(Txn.sender(), Txn.assets[0]),
                 ],
+                #   [
+                #     Txn.application_args[0] == op_append_drt,
+                #     redeem_append_drt(),
+                # ],
             ),
             Reject(),
         ),
