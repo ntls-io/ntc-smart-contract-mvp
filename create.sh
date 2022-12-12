@@ -24,7 +24,7 @@ goal app create \
     --global-byteslices 3 \
     --global-ints 55 \
     --local-byteslices 2 \
-    --local-ints 4 \
+    --local-ints 5 \
     --app-account $ACCOUNT_ENCLAVE |
     grep Created |
     awk '{ print $6 }'

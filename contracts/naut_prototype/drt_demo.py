@@ -24,7 +24,8 @@ def approval():
     local_rows_contributed = Bytes("rows_contributed")                  # Computational variable for royalty fees 
     local_g_drt_payment_row_average = Bytes("g_drt_payment_row_average")# Computational variable for royalty fees
     local_no_times_contributed = Bytes("no_times_contributed")          # No. times contributed to pool
- 
+    local_royalty_fee = Bytes("royalty_fee")                            #royalty fee owed
+    
     # Methods
     op_create_drt = Bytes("create_drt")                                 # Method call
     op_update_data_package = Bytes("update_data_package")               # Method call
@@ -35,6 +36,7 @@ def approval():
     op_claim_fees = Bytes("claim_fees")                                 # Method call
     op_append_drt = Bytes("add_data_contributor")                       # Method call
     op_add_creator_contribution = Bytes("creator_data_validation_add")  # Method call
+    op_log_royalty = Bytes("compute_royalty_fee")                       # Method call
     
     @Subroutine(TealType.none)
     def defaultTransactionChecks(txnId: Expr):
@@ -132,8 +134,22 @@ def approval():
         l_size = App.localGet(acc, local_rows_contributed)
         l_average = App.localGet(acc, local_g_drt_payment_row_average)
         g_average = App.globalGet(global_drt_payment_row_average)
+        royalty_fee = ScratchVar()
         return Seq(
-            Return (l_size*(g_average - l_average))
+            royalty_fee.store(l_size*(g_average - l_average)),
+            App.localPut(acc, local_royalty_fee, royalty_fee.load()),
+            Return (royalty_fee.load())
+        )
+        
+
+# function to compute the royalty fee
+    @Subroutine(TealType.none)
+    def store_royalty_fee(acc: Expr):
+        royalty_fee = ScratchVar()
+        return Seq(
+            royalty_fee.store(compute_royalty_fee(acc)),
+            App.localPut(acc, local_royalty_fee, royalty_fee.load()),
+            Approve(),
         )
 
 # function to update the global variable to a new data package hash. 
@@ -170,10 +186,10 @@ def approval():
         return Seq(
             #basic sanity checks
             defaultTransactionChecks(Int(0)),
-            program.check_self(
-                group_size=Int(1), #ensure 1 transaction
-                group_index=Int(0),
-            ),
+            # program.check_self(
+            #     group_size=Int(1), #ensure 1 transaction
+            #     group_index=Int(0),
+            # ),
             program.check_rekey_zero(1),
             Assert(
                 And(
@@ -184,7 +200,7 @@ def approval():
                     #ensure there is atleast 2 arguments
                     Txn.application_args.length() == Int(7), # instruction, name, amount, url of binary, hash of binary, note, exchange price
                     #ensure the creator has contributed, i.e. there is data to create a drt from
-                    creator_times_contributed == Int(1),
+                    creator_times_contributed >= Int(1),
                 )
             ),
             #create drt and record asset id
@@ -339,7 +355,7 @@ def approval():
                     #ensure new hash not nothing
                     new_hash != Bytes(""),
                     #ensure creator has already contributed during initialisation
-                    creator_no_contributed > Int(0),
+                    creator_no_contributed >= Int(1),
                 )
             ),
             # add contribution counter in local variable
@@ -470,20 +486,77 @@ def approval():
             Approve(),
         )
 
-# # Function to redeem the Append DRT [WIP]
-#     @Subroutine(TealType.none)
-#     def redeem_append_drt():
-#         return Seq(
-#             Assert(
-#                 And(
-#                     Gtxn[0].type_enum() == TxnType.AssetTransfer,
-#                     #Global.current_application_address() == Gtxn[0].receiver(), # check the reciever of the asset transfer is the smart cotnract
-                    
-#                 )
-#             ),
-#             App.globalPut(Bytes("Gtxn[0].receiver()"), Gtxn[0].amount()),
-#             Approve(),
-#         )
+# Function to redeem the Append DRT [WIP]
+    @Subroutine(TealType.none)
+    def redeem_append_drt():
+        #added account
+        contributor_account = Txn.accounts[1],
+        #store senders asset holdings of contributor token to check for opting in 
+        contributorOptIn = AssetHolding.balance(Txn.accounts[1], Txn.assets[0])
+        #store asset id of append drt
+        appendID = Gtxn[0].xfer_asset()
+        #store rows of data to append
+        new_rows = Btoi(Txn.application_args[1])
+        #store the new data hash
+        new_hash = Txn.application_args[2]
+        # store approval
+        approved = Btoi(Txn.application_args[3])
+        #compute royalty fee for sender
+        royalty_fee = compute_royalty_fee(Txn.accounts[1]) 
+        
+        return Seq(
+             #basic sanity checks
+            defaultTransactionChecks(Int(0)),  # Perform default transaction checks
+            defaultTransactionChecks(Int(1)), # Perform default transaction checks
+            program.check_rekey_zero(1),
+           
+            contributorOptIn,
+            Assert(
+                And(
+                    #check group size
+                    Global.group_size() == Int(2),
+                    #check the attached account is equal to the account who sent the append drt
+                    Txn.accounts[1] == Gtxn[0].sender(),
+                    #check the attached asset is equal to the contributor token
+                    Txn.assets[0] == App.globalGet(global_contributor_asset_id),
+                    #check the sender of this transaction is the enclaves accounts
+                    Txn.sender() == App.globalGet(global_enclave_address),
+                    #check the first transaction was an asset transfer
+                    Gtxn[0].type_enum() == TxnType.AssetTransfer,
+                    #check the receiver of the asset transfer was the smart contract
+                    Global.current_application_address() == Gtxn[0].asset_receiver(), # check the reciever of the asset transfer is the smart cotnract
+                    #check the asset is the append drt
+                    appendID == App.globalGet(global_append_asset_id),
+                    #check sender of append drt has opted in to contributor token
+                    contributorOptIn.hasValue(),
+                    #check sender has opted into smart contract
+                    App.optedIn(Txn.accounts[1], Global.current_application_id()),
+                    #ensure royalty fee is zero for the redeeming account
+                    royalty_fee == Int(0),
+                    #ensure hashes are not the same
+                    new_hash != App.globalGet(global_data_package_hash),
+                    #ensure new hash not nothing
+                    new_hash != Bytes(""),
+                    #ensure approved
+                    approved == Int(1),
+                    #ensure asset amount is equal to 1
+                    Gtxn[0].asset_amount() == Int(1),
+                )
+            ),
+            # add contribution counter in local variable
+            App.localPut(Txn.accounts[1], local_no_times_contributed, (App.localGet(Txn.accounts[1], local_no_times_contributed)+Int(1))),       
+            # add new row average to local
+            App.localPut(Txn.accounts[1],local_g_drt_payment_row_average, App.globalGet(global_drt_payment_row_average)),    
+            # add no of rows contributed
+            App.localPut(Txn.accounts[1],local_rows_contributed, (new_rows + App.localGet(Txn.accounts[1], local_rows_contributed))),
+        
+            #update global hash 
+            App.globalPut(global_data_package_hash, new_hash),
+            #update global row counter
+            App.globalPut(global_dataset_total_rows, (new_rows + App.globalGet(global_dataset_total_rows))),
+
+            Approve(),
+        )
 
 
 # Check the transaction type and execute the corresponding code
@@ -537,7 +610,7 @@ def approval():
                     Txn.application_args[0] == op_contributor_append_token,
                     init_create_contributor_append(),
                 ],
-                 [
+                [
                     Txn.application_args[0] == op_add_creator_contribution,
                     add_creator_contribution(),
                 ],
@@ -545,18 +618,22 @@ def approval():
                     Txn.application_args[0] == op_update_drt_price,
                     update_drt_price(),
                 ],
-                 [
+                [
                     Txn.application_args[0] == op_buy_drt,
                     buy_drt(),
                 ],
-                 [
+                [
                     Txn.application_args[0] == op_claim_fees,
                     claim_royalty(Txn.sender(), Txn.assets[0]),
                 ],
-                #   [
-                #     Txn.application_args[0] == op_append_drt,
-                #     redeem_append_drt(),
-                # ],
+                [
+                    Txn.application_args[0] == op_append_drt,
+                    redeem_append_drt(),
+                ],
+                [
+                    Txn.application_args[0] == op_log_royalty,
+                    store_royalty_fee(Txn.accounts[0])
+                ],
             ),
             Reject(),
         ),
