@@ -35,7 +35,7 @@ $ ./sandbox enter algod
 ```
 4. In sandbox, deploy and create smart contract
 ```txt
-$ source /data/script_creation.sh
+$ source /data/create.sh
 ```
 5. In sandbox, run example
 ```txt
