@@ -166,7 +166,7 @@ def approval():
             Assert(
                 And(
                     #ensure the transaction sender is the nautilus wallet address
-                    Txn.sender() == Global.creator_address(),
+                    Txn.sender() == App.globalGet(global_enclave_address),
                     #ensure there is atleast 2 arguments
                     Txn.application_args.length() == Int(2), 
                 )
