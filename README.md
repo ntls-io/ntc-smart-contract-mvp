@@ -37,12 +37,14 @@ $ ./sandbox enter algod
 ```txt
 $ source /data/create.sh
 ```
-5. In sandbox, run example
+## Run Test
+
+In sandbox, directly after you have created the smart contract, run
 ```txt
 $ source /data/test.sh 
 ```
 
-# Smart Contract Calls 
+# Interact with Smart Contract 
 
 ## General Calls
 These are general calls made to your sandboxed algorand lockchain using the `goal` cli. Please enter the sandbox to execute these commands.
@@ -66,61 +68,117 @@ goal account info -a $ACCOUNT_APP
 goal app read --local --from $ACCOUNT_2 --app-id $APP_ID
 ```
 
-## Functional Calls
+## Smart Contract Functional Calls
 ### Add new data contributor
-To add a new data contributor, the account to be added needs to be opted into:
+To add a new data contributor, the account to be added needs to purchase and the Append DRT and be opted into:
 - the smart contract (APP_ID)
 - and, the contributor token (CONTRIB_ID)
 
-Following this the smart contract can then be instructed to add a new contributor.
+Once the above is complete, the contributor needs to sign a transfer transaction to send the the Append DRT back to the smart contract (redeem) within a group transaction where the second transaction in the group transaction is signed by the enclave to validate the incoming data. 
 
-1. optin to application
+1. optin to Apppend DRT
+```txt
+goal asset optin \
+    --assetid $APPEND_ID \
+    -a $ACCOUNT_2 
+```
+2. Purchase the Append DRT
+```
+goal app call \
+    --app-id $APP_ID \
+    -f $ACCOUNT_2 \
+    --app-arg "str:buy_drt" \
+    --app-arg "int:1" \
+    --foreign-asset $APPEND_ID \
+    --out txnAppCall.tx
+
+goal clerk send \
+    -a 1000000 \
+    -t "$ACCOUNT_APP" \
+    -f "$ACCOUNT_2" \
+    --out txnPayment.tx
+
+cat txnAppCall.tx txnPayment.tx > buyCombinedTxns.tx
+goal clerk group -i buyCombinedTxns.tx -o buyGroupedTxns.tx
+goal clerk sign -i buyGroupedTxns.tx -o signoutbuy.tx
+goal clerk rawsend -f signoutbuy.tx
+```
+3. optin to application
 ```txt
 goal app optin \
  --app-id $APP_ID \
  --from $ACCOUNT_2 \
 ```
-2. optin transaction to the asset id of the data contributor token
+4. optin to the asset id of the contributor token
 ```txt
 goal asset optin \
  --assetid $CONTRIB_ID \
  -a $ACCOUNT_2 \
 ```
-3. instruction from creators account to the smart contract to "add_contributor",
-   NB have to specifiy asset in the transaction instruction
-   NB have to specifiy the amount of rows of data being added to the pool
+3. Group transaction from the contributor and the enclave.
+   * Transaction 1 is an asset transfer instruction to send an Append DRT to the smart contract.
+```txt
+goal asset send \
+    -f $ACCOUNT_2 \
+    -t $ACCOUNT_APP \
+    --assetid $APPEND_ID \
+    -a 1 \
+    --out txnTransfer2.tx
+```
+   * Transaction 2 is an application call to the smart contract with the instruction to "add_data_contributor".
+      NB have to specifiy how many rows of data to contribute to the pool
+      NB have to provide the new data package hash
+      NB have to specify that the new data is approved
+      NB have to include the contributor token ID
+      NB have to reference the account that has redeemed the append DRT.
 ```txt
 goal app call \
-   --app-id $APP_ID \
-   -f $ACCOUNT_1 \
-   --app-arg "str:add_contributor" \
-   --app-arg "int:7" \
-   --app-arg "str:SVCAJHVSC--hello---DHBSU#$" \
-   --app-account $ACCOUNT_2 \
-   --foreign-asset $CONTRIB_ID \
+    --app-id $APP_ID \
+    -f $ACCOUNT_ENCLAVE \
+    --app-arg "str:add_data_contributor" \
+    --app-arg "int:9" \
+    --app-arg "str:DGVWUSNA--Newnew--ASUDBQ" \
+    --app-arg "int:1" \
+    --foreign-asset $CONTRIB_ID \
+    --app-account $ACCOUNT_2 \
+    --out txnAppCall2.tx
+```
+   The two transactions are joined into a single group transaction and sent to the smart contract. 
+```txt
+cat txnTransfer2.tx txnAppCall2.tx > appendCombinedTxns2.tx
+goal clerk group -i appendCombinedTxns2.tx -o groupedtransactions.tx 
+goal clerk split -i groupedtransactions.tx -o splitfiles  
+
+goal clerk sign -i splitfiles-0 -o splitfiles-0.sig 
+goal clerk sign -i splitfiles-1 -o splitfiles-1.sig 
+
+cat splitfiles-0.sig splitfiles-1.sig > signout.tx
+goal clerk rawsend -f signout.tx 
 ```
 
 ### Update data package
-Transaction to update the data package of the smart contract, only executed from creators address
+Transaction to update the data package of the smart contract, only executed from enclave address
 ```txt
 goal app call \
  --app-id $APP_ID \
-    -f $ACCOUNT_1 \
+    -f $ACCOUNT_ENCLAVE \
     --app-arg "str:update_data_package" \
     --app-arg "str:SVCAJHVSC--UPDATED_PACKAGE---DHBSU#$" \
 ```
 
 ### Create Digital Right Token (DRT)
-Transaction to create a DRT, specify name, amount, note ( if needed ), exchange price i.e. 3000000 MicroAlgos = 3 Algos.
+Transaction to create a DRT, specify name, amount, url of the binary code it represents, the hash of the binary code , note ( if needed ), exchange price i.e. 3000000 MicroAlgos = 3 Algos.
 ```txt
 goal app call \
- --app-id $APP_ID \
- -f $ACCOUNT_1 \
- --app-arg "str:create_drt" \
- --app-arg "str:ALEX_DRT_01" \
- --app-arg "int:10000" \
- --app-arg "str:note" \
- --app-arg "int:3000000" \
+    --app-id $APP_ID \
+    -f $ACCOUNT_1 \
+    --app-arg "str:create_drt" \
+    --app-arg "str:ALEX_DRT_01" \
+    --app-arg "int:10000" \
+    --app-arg "str:https://code_binary_url" \
+    --app-arg "str:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" \
+    --app-arg "str:note" \
+    --app-arg "int:3000000"
 ```
 
 ### Update DRT Price
@@ -147,7 +205,7 @@ goal app call \
 ```txt
 goal asset optin \
  --assetid 125 \
- -a $ACCOUNT_NAUT \
+ -a $ACCOUNT_2 \
 ```
 
 2. Group Txn, the transaction will only be successfull if all individual transactions in the group are successful.
@@ -155,7 +213,7 @@ goal asset optin \
 ```txt
 goal app call \
  --app-id $APP_ID \
-    -f $ACCOUNT_NAUT \
+    -f $ACCOUNT_2 \
     --app-arg "str:buy_drt" \
     --app-arg "int:2" \
     --foreign-asset 125 \
@@ -185,13 +243,36 @@ goal clerk rawsend -f signoutbuy.tx
 ```
 
 ### Claim fees
-Transaction to for data contributors to claim their fees, need the asset ID of the contributor token
+Transaction for data contributors to claim their fees, need the asset ID of the contributor token
 ```txt
 goal app call \
  --app-id $APP_ID \
  -f $ACCOUNT_2 \
  --app-arg "str:claim_fees" \
  --foreign-asset $CONTRIB_ID \
+```
+### Compute Fees
+Transaction for data contributors to compute the current fees owed to them that can then be viewed in their local vairables.
+```txt
+goal app call \
+ --app-id $APP_ID \
+ -f $ACCOUNT_2 \
+ --app-arg "str:compute_royalty_fee" \
+
+```
+
+### Add additional data contributor from creator 
+Transaction only for the smart contract creator to add additional data. The smart contract creator need not to purchase an Append DRT to contribute to the smart contract they created. Only a single transaction from the enclave to validate the incoming data is needed.
+```txt
+goal app call \
+    --app-id $APP_ID \
+    -f $ACCOUNT_ENCLAVE \
+    --app-arg "str:creator_data_validation_add" \
+    --app-arg "int:12" \
+    --app-arg "str:DGVWUSNA--CREATOR--ASUDBQ" \
+    --app-arg "int:1" \
+    --foreign-asset $CONTRIB_ID \
+    --app-account $ACCOUNT_1
 ```
 
 # Links
