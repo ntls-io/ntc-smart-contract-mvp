@@ -47,7 +47,7 @@ $ source /data/test.sh
 # Interact with Smart Contract Manually
 
 ## General Calls
-These are general calls made to your sandboxed algorand lockchain using the `goal` cli. Please enter the sandbox to execute these commands.
+These are general calls made to your sandboxed algorand blockchain using the [`goal`](https://developer.algorand.org/docs/clis/goal/goal/#:~:text=GOAL%20is%20the%20CLI%20for,a%20different%20version%20of%20algod.) cli. Please enter the sandbox to execute these commands.
 ### See global variables of smart contract
 ```txt
 goal app read --global --app-id $APP_ID --guess-format
