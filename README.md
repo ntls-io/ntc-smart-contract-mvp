@@ -74,7 +74,7 @@ To add a new data contributor, the account to be added needs to purchase and the
 - the smart contract (APP_ID)
 - and, the contributor token (CONTRIB_ID)
 
-Once the above is complete, the contributor needs to sign a transfer transaction to send the the Append DRT back to the smart contract (redeem) within a group transaction where the second transaction in the group transaction is signed by the enclave to validate the incoming data. 
+Once the above is complete, the contributor needs to sign a transfer transaction to transfer the Append DRT back to the smart contract (redeem) within a group transaction where the second transaction in the group transaction is signed by the enclave to validate the incoming data. 
 
 1. optin to Apppend DRT
 ```txt
