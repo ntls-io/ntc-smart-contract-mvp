@@ -44,7 +44,7 @@ In sandbox, directly after you have created the smart contract, run
 $ source /data/test.sh 
 ```
 
-# Interact with Smart Contract 
+# Interact with Smart Contract Manually
 
 ## General Calls
 These are general calls made to your sandboxed algorand lockchain using the `goal` cli. Please enter the sandbox to execute these commands.
