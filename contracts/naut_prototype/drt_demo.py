@@ -341,7 +341,7 @@ def approval():
                     # #check it is approved
                     approved == Int(1),
                     # #check that the receiver of the token has opted in. 
-                    accountAssetBalance.hasValue(),
+                    accountAssetBalance.value() == Int(1),
                     #ensure asset provided is the same as contributor asset ID
                     Txn.assets[0] == App.globalGet(global_contributor_asset_id),
                     # #ensure there is atleast 4 arguments
@@ -358,6 +358,7 @@ def approval():
                     creator_no_contributed >= Int(1),
                 )
             ),
+        
             # add contribution counter in local variable
             App.localPut(Txn.accounts[1], local_no_times_contributed, (creator_no_contributed+Int(1))),       
             # add new row average to local
@@ -543,6 +544,12 @@ def approval():
                     Gtxn[0].asset_amount() == Int(1),
                 )
             ),
+            
+            #send contributor token to contributor if the contributor token does not have a balance of 1
+            If(contributorOptIn.value() == Int(0))
+            .Then(
+                 inner_asset_transfer_txn(Txn.assets[0], Int(1), Txn.accounts[1]),
+            ),
             # add contribution counter in local variable
             App.localPut(Txn.accounts[1], local_no_times_contributed, (App.localGet(Txn.accounts[1], local_no_times_contributed)+Int(1))),       
             # add new row average to local
@@ -563,8 +570,8 @@ def approval():
 # 1. If smart contract does not exist it will trigger the initialisation sequence contained in the "init" variable.
 # 2. An Optin transaction is simply approved.
 # 3. If the transaction type is a NoOp transaction, i.e. an Application Call, then it checks the first argument of the call which must be equal to one of the method call variables
-# "op_create_drt", "op_update_data_package", "op_contributor_append_token", "op_new_contributor", "op_update_drt_price", "op_update_drt_price", 
-# "op_buy_drt", "op_claim_fees".
+# "op_create_drt", "op_update_data_package", "op_contributor_append_token", "op_creator_contribution", "op_add_creator_contribution","op_update_drt_price", "op_update_drt_price", 
+# "op_buy_drt", "op_claim_fees", "op_append_drt","op_log_royalty".
     return program.event(
         init=Seq( 
             [

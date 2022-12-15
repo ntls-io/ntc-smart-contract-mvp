@@ -26,7 +26,7 @@ echo ""
 echo "Store asset ID... "
 ASSET_ID=$(goal app read --global --app-id $APP_ID --guess-format | awk -F'"' '{print $2}' | head -6 | tail -1)
 echo ""
-echo "Account 2 purhases DRT..."
+echo "Account 2 purhases the newly created DRT..."
 echo "To purchase a DRT, account 2 has to opt into the assset..."
 echo ""
 
