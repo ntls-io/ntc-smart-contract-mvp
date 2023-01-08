@@ -143,7 +143,6 @@ def approval():
             
             royalty_fee.store(l_size.load()*(g_average - l_average.load())),
             App.globalPut(Bytes("royalty_fee"),royalty_fee.load()),
-            #App.localPut(acc, local_royalty_fee, royalty_fee.load()),
             Return (royalty_fee.load())
         )     
 
@@ -530,9 +529,8 @@ def approval():
 # Check the transaction type and execute the corresponding code
 # 1. If smart contract does not exist it will trigger the initialisation sequence contained in the "init" variable.
 # 2. An Optin transaction is simply approved.
-# 3. If the transaction type is a NoOp transaction, i.e. an Application Call, then it checks the first argument of the call which must be equal to one of the method call variables
-# "op_create_drt", "op_update_data_package", "op_contributor_append_token", "op_creator_contribution", "op_add_creator_contribution","op_update_drt_price", "op_update_drt_price", 
-# "op_buy_drt", "op_claim_fees", "op_append_drt","op_log_royalty".
+# 3. If the transaction type is a NoOp transaction, i.e. an Application Call, then it checks the first argument of the call which must be equal to one of the method call variables:
+# "op_create_drt", "op_update_data_package","op_update_drt_price", "op_box_store_transfer", "op_buy_drt", "op_claim_royalty", "op_append_drt","op_init_contract"
     return program.event(
         init=Seq( 
             [
