@@ -21,10 +21,11 @@ goal app create \
     --creator $ACCOUNT_1 \
     --approval-prog /data/build/approval.teal \
     --clear-prog /data/build/clear.teal \
-    --global-byteslices 3 \
-    --global-ints 55 \
+    --global-byteslices 6 \
+    --global-ints 50 \
     --local-byteslices 2 \
     --local-ints 5 \
+    --extra-pages 2 \
     --app-account $ACCOUNT_ENCLAVE |
     grep Created |
     awk '{ print $6 }'
@@ -57,43 +58,41 @@ goal clerk send \
 echo ""
 
 # the third will be to instruct the smart contract to create the contributor token
-echo "Call smart contract to create contributor and append token"
+echo "Call to initialise smart contracts first contribution, called by the enclave"
 goal app call \
     --app-id $APP_ID \
-    -f $ACCOUNT_1 \
-    --app-arg "str:contributor_append_token" \
-    --app-arg "str:DRT_Contributor" \
-    --app-arg "str:DRT_C" \
-    --app-arg "int:10000" \
+    -f $ACCOUNT_ENCLAVE \
+    --app-arg "str:init_contract" \
+    --app-arg "int:5" \
+    --app-arg "str:DGVWUSNA--init--ASUDBQ" \
     --app-arg "str:Append_DRT" \
     --app-arg "str:DRT" \
-    --app-arg "int:1000000"
+    --app-arg "int:1000000" \
+    --app-account $ACCOUNT_1 
     
-
-export CONTRIB_ID=$(goal app read --global --app-id $APP_ID --guess-format | awk '{print $2}' | head -28 | tail -1)
-echo "Store contributor token ID: CONTRIB_ID=$CONTRIB_ID"
-
 echo ""
-export APPEND_ID=$(goal app read --global --app-id $APP_ID --guess-format | awk '{print $2}' | head -24 | tail -1)
-echo "Store append DRT token ID: APPEND_ID=$APPEND_ID"
-
-echo "Optin to contributor token"
+export APPEND_ID=$(goal app read --global --app-id $APP_ID --guess-format | awk -F'"' '{print $2}' | head -2 | tail -1)
+echo "Store Append token ID: APPEND_ID=$APPEND_ID"
+export CONTRIB_1_ID=$(goal app read --global --app-id $APP_ID --guess-format | awk '{print $2}' | head -37 | tail -1)
+echo "Store contributor token ID: CONTRIB_1_ID=$CONTRIB_1_ID"
+echo ""
+echo "Smart contract creator must claim their contributor token from their initial contribution..."
+echo "1. Optin to contributor token"
+goal app read --global --app-id $APP_ID --guess-format
 
 goal asset optin \
-    --assetid $CONTRIB_ID \
+    --assetid $CONTRIB_1_ID \
     -a $ACCOUNT_1 \
 
 echo ""
-echo "Add smart contract creator as a data contributor for initialisation, add data package hash"
+echo "2. Claim contributor token... "
 
 goal app call \
     --app-id $APP_ID \
-     -f $ACCOUNT_1 \
-    --app-arg "str:add_creator_as_contributor" \
-    --app-arg "int:5" \
-    --app-arg "str:DGVWUSNA--DATA_PACKAGE_HASH--ASUDBQ" \
-    --app-account $ACCOUNT_1 \
-    --foreign-asset $CONTRIB_ID \
+    -f $ACCOUNT_1 \
+    --app-arg "str:box_store_transfer" \
+    --foreign-asset $CONTRIB_1_ID \
+    --box "str:$CONTRIB_1_ID"
     
 echo ""
 
