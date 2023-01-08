@@ -70,11 +70,11 @@ goal app read --local --from $ACCOUNT_2 --app-id $APP_ID
 
 ## Smart Contract Functional Calls
 ### Add new data contributor
-To add a new data contributor, the account to be added needs to purchase and the Append DRT and be opted into:
-- the smart contract (APP_ID)
-- and, the contributor token (CONTRIB_ID)
+To add a new data contributor, the contributing account needs to purchase the Append DRT and redeem it.
 
-Once the above is complete, the contributor needs to sign a transfer transaction to transfer the Append DRT back to the smart contract (redeem) within a group transaction where the second transaction in the group transaction is signed by the enclave to validate the incoming data. 
+To redeem the Append DRT, the contributor needs to sign a transfer transaction to transfer the Append DRT back to the smart contract (redeem) within a group transaction where the second transaction in the group transaction is signed by the enclave to validate the incoming data. In this step the contributor is added. 
+
+Lastly, a contributor token is created representing the contribution. This token sits in the account of the smart contract and needs to be claimed be the contributor. The functionality of add more data contributors to the smart contract will be paused until the contributor claims their contribution.
 
 1. optin to Apppend DRT
 ```txt
@@ -82,7 +82,7 @@ goal asset optin \
     --assetid $APPEND_ID \
     -a $ACCOUNT_2 
 ```
-2. Purchase the Append DRT
+2. Purchase the Append DRT.
 ```
 goal app call \
     --app-id $APP_ID \
@@ -103,19 +103,8 @@ goal clerk group -i buyCombinedTxns.tx -o buyGroupedTxns.tx
 goal clerk sign -i buyGroupedTxns.tx -o signoutbuy.tx
 goal clerk rawsend -f signoutbuy.tx
 ```
-3. optin to application
-```txt
-goal app optin \
- --app-id $APP_ID \
- --from $ACCOUNT_2 \
-```
-4. optin to the asset id of the contributor token
-```txt
-goal asset optin \
- --assetid $CONTRIB_ID \
- -a $ACCOUNT_2 \
-```
-3. Group transaction from the contributor and the enclave.
+3. Redeem the Append DRT.
+   Group transaction from the contributor and the enclave.
    * Transaction 1 is an asset transfer instruction to send an Append DRT to the smart contract.
 ```txt
 goal asset send \
@@ -154,6 +143,22 @@ goal clerk sign -i splitfiles-1 -o splitfiles-1.sig
 
 cat splitfiles-0.sig splitfiles-1.sig > signout.tx
 goal clerk rawsend -f signout.tx 
+```
+
+4. Optin to newly created contributor token representing the above contribution.
+```txt
+goal app optin \
+ --asset-id $CONTRIB_ID \
+ --from $ACCOUNT_2 \
+```
+5. Claim contributor token. 
+```txt
+goal app call \
+    --app-id $APP_ID \
+    -f $ACCOUNT_2 \
+    --app-arg "str:box_store_transfer" \
+    --foreign-asset $CONTRIB_ID \
+    --box "str:$CONTRIB_ID"
 ```
 
 ### Update data package
@@ -246,33 +251,11 @@ goal clerk rawsend -f signoutbuy.tx
 Transaction for data contributors to claim their fees, need the asset ID of the contributor token
 ```txt
 goal app call \
- --app-id $APP_ID \
- -f $ACCOUNT_2 \
- --app-arg "str:claim_fees" \
- --foreign-asset $CONTRIB_ID \
-```
-### Compute Fees
-Transaction for data contributors to compute the current fees owed to them that can then be viewed in their local vairables.
-```txt
-goal app call \
- --app-id $APP_ID \
- -f $ACCOUNT_2 \
- --app-arg "str:compute_royalty_fee" \
-
-```
-
-### Add additional data contributor from creator 
-Transaction only for the smart contract creator to add additional data. The smart contract creator need not to purchase an Append DRT to contribute to the smart contract they created. Only a single transaction from the enclave to validate the incoming data is needed.
-```txt
-goal app call \
     --app-id $APP_ID \
-    -f $ACCOUNT_ENCLAVE \
-    --app-arg "str:creator_data_validation_add" \
-    --app-arg "int:12" \
-    --app-arg "str:DGVWUSNA--CREATOR--ASUDBQ" \
-    --app-arg "int:1" \
-    --foreign-asset $CONTRIB_ID \
-    --app-account $ACCOUNT_1
+    -f $ACCOUNT_1 \
+    --app-arg "str:claim_royalty_contributor" \
+    --box "str:$CONTRIB_1_ID" \
+    --foreign-asset $CONTRIB_1_ID
 ```
 
 # Links
