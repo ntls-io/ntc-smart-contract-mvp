@@ -51,7 +51,7 @@ echo ""
 echo "Fund smart contract from ACCOUNT_1"
 #now you can fund the smart contract from account 1
 goal clerk send \
-    -a 1000000 \
+    -a 100000000 \
     -t "$ACCOUNT_APP" \
     -f "$ACCOUNT_1" \
 

@@ -42,6 +42,7 @@ goal app call \
     --app-arg "str:buy_drt" \
     --app-arg "int:1" \
     --foreign-asset $ASSET_ID \
+    --box "$APP_ID,b64:"
     --out txnAppCall.tx
 
 goal clerk send \
