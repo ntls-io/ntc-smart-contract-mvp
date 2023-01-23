@@ -32,6 +32,9 @@ def approval():
     op_claim_royalty = Bytes("claim_royalty_contributor")               # Method call
     op_box_store_transfer = Bytes("box_store_transfer")                 # Method call
     op_init_contract = Bytes("init_contract")                           # Method call
+    op_drt_ownership_change = Bytes("drt_owner_change")                 # Method call
+    op_drt_to_box = Bytes("drt_to_box")                                 # Method Call 
+    op_con_ownership_change = Bytes("contributor_owner_change")         # Method Calls
     
     @Subroutine(TealType.none)
     def defaultTransactionChecks(txnId: Expr):
@@ -151,17 +154,16 @@ def approval():
     @Subroutine(TealType.none)
     def create_drt():
         asset_id = ScratchVar()
-        exchange_rate=ScratchVar()
-        # creator_times_contributed = App.localGet(Txn.sender(),local_no_times_contributed)
+        exchangeRate_supply=ScratchVar()
         
         init = App.globalGet(global_init)
         return Seq(
             #basic sanity checks
             defaultTransactionChecks(Int(0)),
-            # program.check_self(
-            #     group_size=Int(1), #ensure 1 transaction
-            #     group_index=Int(0),
-            # ),
+            program.check_self(
+                group_size=Int(1), #ensure 1 transaction
+                group_index=Int(0),
+            ),
             program.check_rekey_zero(1),
             Assert(
                 And(
@@ -171,8 +173,7 @@ def approval():
                     App.globalGet(global_drt_counter) < Int(50),
                     #ensure there is atleast 2 arguments
                     Txn.application_args.length() == Int(7), # instruction, name, amount, url of binary, hash of binary, note, exchange price
-                    #ensure the creator has contributed, i.e. there is data to create a drt from
-                    # creator_times_contributed >= Int(1),
+
                     
                     init != Int(0),
                 )
@@ -181,13 +182,50 @@ def approval():
             #name: Expr, unit_name: Expr, amount: Expr, asset_url: Expr, binHash: Expr, note: Expr
             asset_id.store(inner_asset_create_txn(Txn.application_args[1],DRT_UNIT_NAME ,Txn.application_args[2], Txn.application_args[3] ,Txn.application_args[4], Txn.application_args[5])),
             #store DRT price in contract alongside asset id in globals
-            exchange_rate.store(Btoi(Txn.application_args[6])),
-            App.globalPut(itoa(asset_id.load()),exchange_rate.load()),
+            exchangeRate_supply.store(Concat(Txn.application_args[6],Txn.application_args[2])),
+            App.globalPut(itoa(asset_id.load()),exchangeRate_supply.load()),
             #incremement counter
             App.globalPut(global_drt_counter, App.globalGet(global_drt_counter) + Int(1)),
+            
             Approve(),
         )
 
+# Function to initiliase the creation of a DRT, incorporates the inner_asset_create_txn function
+    @Subroutine(TealType.none)
+    def drt_to_box(asset_id: Expr):
+        
+        drt_variables = App.globalGet(itoa(asset_id))
+        supply = ExtractUint64(drt_variables,Int(8))
+        exchange_rate = ExtractUint64(drt_variables,Int(0))
+        drt_exists_in_account = AssetHolding.balance(Global.current_application_address(), asset_id)
+        drt_box_name = Concat(Itob(Txn.assets[0]),Global.current_application_address())
+        
+        init = App.globalGet(global_init)
+        return Seq(     
+        drt_exists_in_account,
+        #basic sanity checks
+            defaultTransactionChecks(Int(0)),  # Perform default transaction checks
+            program.check_rekey_zero(1),
+            Assert(
+                And(
+                    #check the sender is equal to the account who sent the append drt and wants to be a contributor
+                    Txn.sender() == Global.creator_address(),
+                    #ensure drt was properly created
+                    supply != Int(0),
+                    exchange_rate != Int(0),
+                    drt_exists_in_account.value() == supply,
+
+                    init == Int(1),
+                )
+            ),
+            
+            App.box_put(drt_box_name, drt_variables),
+            
+            App.globalPut(Bytes("test_number_sup"), supply),
+            App.globalPut(Bytes("test_number_ex"), exchange_rate),
+            
+            Approve()
+        )
 
 # init function to initiliase the smart contract
 ## - Create Append DRT
@@ -256,7 +294,11 @@ def approval():
             # store newly created asset ID, address, variables in global variables
             App.globalPut(global_new_contributor, contrib_id.load()),
             App.globalPut(global_new_contributor_address,Txn.accounts[1]),
-            App.globalPut(global_new_contributor_variables, Concat(Itob(App.globalGet(global_drt_payment_row_average)),Itob(Btoi(Txn.application_args[1])))),
+            #App.globalPut(global_new_contributor_variables, Concat(Itob(App.globalGet(global_drt_payment_row_average)),Itob(Btoi(Txn.application_args[1])))),
+           
+           #test and register added account as owner
+            App.globalPut(global_new_contributor_variables, Concat(Itob(App.globalGet(global_drt_payment_row_average)),Itob(Btoi(Txn.application_args[1])), added_account)),
+
            
             #update global hash 
             App.globalPut(global_data_package_hash, new_hash),
@@ -305,19 +347,30 @@ def approval():
     def buy_drt():
         assetToBuy = Gtxn[0].assets[0]
         paymentAmount = Gtxn[1].amount()
-        assetExchangeRate = App.globalGet(itoa(assetToBuy))
-        drt_exist = App.globalGetEx(Int(0), itoa(assetToBuy))
+
         buyerOptIn = AssetHolding.balance(Gtxn[0].sender(), assetToBuy)
-        assetSupply = AssetHolding.balance(Global.current_application_address(), assetToBuy)
         g_n = compute_global_drt_payment_row_average(App.globalGet(global_drt_payment_row_average), App.globalGet(global_dataset_total_rows) , paymentAmount)
+        
+        drt_box_name = Concat(Itob(assetToBuy),Global.current_application_address())
+        supply = ScratchVar()
+        exchange_rate = ScratchVar()
+        new_supply = ScratchVar()
+        
+        #new owner box details
+        new_owner_box_name = Concat(Itob(assetToBuy),Gtxn[0].sender())
+        new_owner_box_variables = ScratchVar()
         
         init = App.globalGet(global_init)
         return Seq(
+            #gather box variables
+            box_contents := App.box_get(drt_box_name), 
+            exchange_rate.store(ExtractUint64(box_contents.value(),Int(0))),
+            supply.store(ExtractUint64(box_contents.value(),Int(8))),
+
             defaultTransactionChecks(Int(0)),  # Perform default transaction checks
             defaultTransactionChecks(Int(1)), # Perform default transaction checks
-            drt_exist,
             buyerOptIn,
-            assetSupply,
+    
             #basic sanity checks
             program.check_self(
                 group_size=Int(2), #ensure 2 transaction
@@ -327,27 +380,37 @@ def approval():
             Assert(
                 And(
                     Gtxn[1].type_enum() == TxnType.Payment,
-                    drt_exist.hasValue(), # Check drt exists
-                    paymentAmount == (assetExchangeRate*Btoi(Gtxn[0].application_args[1])), # Check amount to be paid is correct (exchange rate * how many)
+                    box_contents.hasValue(), # Check drt exists
+                    paymentAmount == (exchange_rate.load()*Btoi(Gtxn[0].application_args[1])), # Check amount to be paid is correct (exchange rate * how many)
                     Global.current_application_address() == Gtxn[1].receiver(), # check the reciever of the payment (2nd transaction) is the app
                     buyerOptIn.hasValue(), #ensure the user has opted in to asset
-                    assetSupply.value() >= Btoi(Gtxn[0].application_args[1]), #ensure there is enough supply
+                    supply.load() >= Btoi(Gtxn[0].application_args[1]), #ensure there is enough supply
                     Gtxn[0].application_args.length() == Int(2),   #ensure there is atleast 2 arguments
                     Gtxn[0].sender() == Gtxn[1].sender(),
-                    #g_n > Int(0), #g_n greater than 0
-                    init != Int(0),
+ 
+                    init == Int(1),
                 )
             ),
             #store it 
             App.globalPut(global_drt_payment_row_average, g_n),
             App.globalPut(global_total_fees, (paymentAmount + App.globalGet(global_total_fees))),
+            
+            #change current supply of previous owner
+            new_supply.store(supply.load() - Btoi(Gtxn[0].application_args[1])),
+            #update existing supply of previous owner
+            App.box_replace(drt_box_name, Int(8), Itob(new_supply.load())),                
+                             
+            #then register new ownership in box storage, only supply is stored
+            new_owner_box_variables.store(Btoi(Gtxn[0].application_args[1])),
+            App.box_put(new_owner_box_name, Itob(new_owner_box_variables.load())),
+            
              # if the above checks out, transfer asset
             inner_asset_transfer_txn(assetToBuy, Btoi(Gtxn[0].application_args[1]), Gtxn[0].sender()),
             
             Approve(),
         )
 
-    
+   
 # Function to redeem the Append DRT 
     @Subroutine(TealType.none)
     def redeem_append_drt():
@@ -411,11 +474,11 @@ def approval():
             #store smart contract ID in asset URL field
             #name: Expr, unit_name: Expr, amount: Expr, asset_url: Expr, binHash: Expr, note: Expr
             contrib_id.store(inner_asset_create_txn(Bytes("Contributor"),Bytes("CONTRIB") ,Bytes("1"),itoa(Global.current_application_id()), DEFAULT_HASH, DEFAULT_NOTE)), #use scratch variable to store asset id of contributor token
-            
+         
             # store newly created asset ID, address, variables in global variables
             App.globalPut(global_new_contributor, contrib_id.load()),
             App.globalPut(global_new_contributor_address,Txn.accounts[1]),
-            App.globalPut(global_new_contributor_variables, Concat(Itob(App.globalGet(global_drt_payment_row_average)),Itob(Btoi(Txn.application_args[1])))),
+            App.globalPut(global_new_contributor_variables, Concat(Itob(App.globalGet(global_drt_payment_row_average)),Itob(Btoi(Txn.application_args[1])),Txn.accounts[1] )),
 
             #update global hash 
             App.globalPut(global_data_package_hash, new_hash),
@@ -470,7 +533,8 @@ def approval():
             #by referencing the correct box name in the box array of the transaction and by only using
             # the global variable holding the asset ID, we inherently check that the correct
             # box reference is being used as the name for the box storage
-            App.box_put(itoa(new_contributor_asset),new_contributor_variables ),
+            App.box_put(itoa(new_contributor_asset),new_contributor_variables),
+            
             
             #transfer asset
             inner_asset_transfer_txn(Txn.assets[0], Int(1), Txn.sender()),
@@ -489,10 +553,12 @@ def approval():
         accountAssetBalance = AssetHolding.balance(account, asset_id)
         royalty_fee = compute_royalty_box(asset_id)
         fees_change = ScratchVar()
+        registered_owner = ScratchVar()
         
         init = App.globalGet(global_init)
         return Seq(
             accountAssetBalance,
+            registered_owner.store(App.box_extract(itoa(asset_id), Int(16), Int(32))),
             #basic santiy checks
             defaultTransactionChecks(Int(0)),
             program.check_self(
@@ -511,10 +577,13 @@ def approval():
                     royalty_fee > Int(0),
                     #ensure royalty fee is less than or equal to the total
                     App.globalGet(global_total_fees) >= royalty_fee,
+                    #check the registered owner is the one who is claiming the fees
+                    registered_owner.load() == account,
                     
                     init != Int(0),
                 )
             ),
+            #App.globalPut(Bytes("registered_owner"), registered_owner.load()), works
             fees_change.store(royalty_fee),
             #transfer the amount
             inner_sendPayment(Txn.sender(), royalty_fee),
@@ -526,13 +595,166 @@ def approval():
             Approve(),
         ) 
    
+# Function to claim royalty fee from the ownership of a contributor token
+    @Subroutine(TealType.none)
+    def drt_ownership_change():
+        #transaction 1 transfer asset values
+        assetTraded = Gtxn[0].xfer_asset() #asset id
+        assetReceiver = Gtxn[0].asset_receiver() #account_encalve
+        assetSender = Gtxn[0].sender() #account_2
+        asset_creator = AssetParam.creator(Gtxn[0].xfer_asset()) #account_app
+        assetAmountBought = Gtxn[0].asset_amount() #asset amount
+        
+        #transaction 2 payment values
+        paymentAmount = Gtxn[1].amount() #traded amount
+        paymentReceiver = Gtxn[1].receiver() # account_2
+        paymentSender = Gtxn[1].sender() #account_enclave
+        
+        #trnasction 3 fees values 
+        ownershipFees = Gtxn[2].amount() # 5% of paymentAMount
+        feesReceiver = Gtxn[2].receiver() # Account_app
+        feesSender = Gtxn[2].sender() #account_enclave
+        
+        #transaction 4 drt ownership change values
+        newOwner = Gtxn[3].sender() #account_enclave
+        asset_id = Gtxn[3].assets[0] # asset_id
+
+        current_drt_box_name = Concat(Itob(assetTraded), Gtxn[0].sender()) #assetid + account_2
+        current_owner_supply = ScratchVar()
+        current_owner_new_supply = ScratchVar()
+        new_owner_box_name = Concat(Itob(assetTraded), Gtxn[3].sender())
+
+        
+        init = App.globalGet(global_init)
+        return Seq(
+            #this function checks that the current DRT exists and that the sender of the DRT is the owner
+            current_drt_variables := App.box_get(current_drt_box_name),
+            current_owner_supply.store(ExtractUint64(current_drt_variables.value(),Int(0))),
+            asset_creator,
+            #basic santiy checks
+            defaultTransactionChecks(Int(0)),
+            program.check_self(
+                group_size=Int(4), #ensure 1 transaction
+                group_index=Int(0),
+            ),
+            program.check_rekey_zero(1),
+            Assert(
+                And(
+                    # check assett traded is the same asset to update
+                    assetTraded == asset_id,
+                    # check new owner is equal to asset receiver
+                    newOwner == assetReceiver,
+                    # check the asset sender is equal to the payment receiver
+                    assetSender == paymentReceiver,
+                    #chek the payment sender is equal to the asset receiver
+                    paymentSender == assetReceiver,
+                    # fees sender is equal to the asset receiver
+                    feesSender == newOwner,
+                    # fees receiver is equal to the smart contract global address
+                    feesReceiver == Global.current_application_address(),
+                    #check the asset being sent's creator is the application address
+                    asset_creator.value() == Global.current_application_address(),
+                    # check that they are paying 5% of traded value to smart contract
+                    ownershipFees == Div(paymentAmount*Int(5),Int(100)),
+   
+                    init != Int(0),
+                )
+            ),
+            App.globalPut(Bytes("asset_sender"),  Gtxn[0].sender()),
+            App.globalPut(Bytes("asset_ID"),  Gtxn[0].xfer_asset()),
+            
+            #change current supply of previous owner
+            current_owner_new_supply.store(current_owner_supply.load() - assetAmountBought),
+            #update existing supply of previous owner
+            App.box_replace(current_drt_box_name, Int(0), Itob(current_owner_new_supply.load())),                
+                             
+            #then register new ownership in box storage
+            App.box_put(new_owner_box_name, Itob(assetAmountBought)),
+            
+            # add fee payout from total fees collected
+            App.globalPut(global_total_fees, (App.globalGet(global_total_fees) + ownershipFees)),
     
+            Approve(),
+        )  
+     
+# Function to change ownership of contributor in secondary market
+    @Subroutine(TealType.none)
+    def contributor_ownership_change():
+        #transaction 1 transfer asset values
+        contributorTraded = Gtxn[0].xfer_asset() #asset id
+        contributorReceiver = Gtxn[0].asset_receiver() #account_encalve
+        contributorSender = Gtxn[0].sender() #account_2
+        contributor_creator = AssetParam.creator(Gtxn[0].xfer_asset()) #account_app
+        contributorAmountBought = Gtxn[0].asset_amount() #asset amount
+        
+        #transaction 2 payment values
+        paymentAmount = Gtxn[1].amount() #traded amount
+        paymentReceiver = Gtxn[1].receiver() # account_2
+        paymentSender = Gtxn[1].sender() #account_enclave
+        
+        #trnasction 3 fees values 
+        ownershipFees = Gtxn[2].amount() # 5% of paymentAMount
+        feesReceiver = Gtxn[2].receiver() # Account_app
+        feesSender = Gtxn[2].sender() #account_enclave
+        
+        #transaction 4 drt ownership change values
+        newContributor = Gtxn[3].sender() #account_enclave
+        contributor_id = Gtxn[3].assets[0] # asset_id
+
+        contributor_box_name = itoa(contributorTraded) #assetid + account_2
+        contributor_owner = ScratchVar()
+        init = App.globalGet(global_init)
+        return Seq(
+            #this function checks that the current contributor token exists
+            contributor_owner.store(App.box_extract(contributor_box_name, Int(16), Int(32))),
+            contributor_creator,
+            #basic santiy checks
+            defaultTransactionChecks(Int(0)),
+            program.check_rekey_zero(1),
+            Assert(
+                And(
+                    # check contributort traded is the same contributor to update
+                    contributorTraded == contributor_id,
+                    # check new owner is equal to contributor receiver
+                    newContributor == contributorReceiver,
+                    # check the contributor sender is equal to the payment receiver
+                    contributorSender == paymentReceiver,
+                    # #chek the payment sender is equal to the contributor receiver
+                    paymentSender == contributorReceiver,
+                    # # fees sender is equal to the contributor receiver
+                    feesSender == newContributor,
+                    # # fees receiver is equal to the smart contract global address
+                    feesReceiver == Global.current_application_address(),
+                    #check the contributor being sent's creator is the application address
+                    contributor_creator.value() == Global.current_application_address(),
+                    # check that they are paying 5% of traded value to smart contract
+                    ownershipFees == Div(paymentAmount*Int(5),Int(100)),
+                    
+                    #current contributor owner equals to asset sender
+                    contributor_owner.load() == contributorSender,
+   
+                    init != Int(0),
+                )
+            ),
+            
+            App.globalPut(Bytes("contributor_ID"),  Gtxn[0].xfer_asset()),
+        
+            #update existing contrinutor owner with new owner
+            App.box_replace(contributor_box_name, Int(16), newContributor),    
+            
+            App.globalPut(Bytes("new_contributor"), App.box_extract(contributor_box_name, Int(16), Int(32))),    
+            
+            # add fee payout from total fees collected
+            App.globalPut(global_total_fees, (App.globalGet(global_total_fees) + ownershipFees)),
+    
+            Approve(),
+        )  
+       
 # Check the transaction type and execute the corresponding code
 # 1. If smart contract does not exist it will trigger the initialisation sequence contained in the "init" variable.
 # 2. An Optin transaction is simply approved.
-# 3. If the transaction type is a NoOp transaction, i.e. an Application Call, then it checks the first argument of the call which must be equal to one of the method call variables
-# "op_create_drt", "op_update_data_package", "op_contributor_append_token", "op_creator_contribution", "op_add_creator_contribution","op_update_drt_price", "op_update_drt_price", 
-# "op_buy_drt", "op_claim_fees", "op_append_drt","op_log_royalty".
+# 3. If the transaction type is a NoOp transaction, i.e. an Application Call, then it checks the first argument of the call which must be equal to one of the method call variables:
+# "op_create_drt", "op_update_data_package","op_update_drt_price", "op_box_store_transfer", "op_buy_drt", "op_claim_royalty", "op_append_drt","op_init_contract"
     return program.event(
         init=Seq( 
             [
@@ -592,6 +814,19 @@ def approval():
                     Txn.application_args[0] == op_init_contract,
                     init_contract()
                 ],
+                 [
+                    Txn.application_args[0] == op_drt_ownership_change,
+                    drt_ownership_change()
+                ],
+                [
+                    Txn.application_args[0] == op_drt_to_box,
+                    drt_to_box(Txn.assets[0])
+                ],
+                [
+                    Txn.application_args[0] == op_con_ownership_change,
+                    contributor_ownership_change()
+                ],
+               
                  
             ),
             Reject(),
