@@ -13,8 +13,8 @@ goal app call \
     --app-id $APP_ID \
     -f $ACCOUNT_1 \
     --app-arg "str:drt_to_box" \
-    --foreign-asset 63 \
-    --box "$APP_ID,b64:AAAAAAAAAD9UUco3BNy8fjhbntGkvNzn+j+BLbmglVrBIFNvqTILLQ==" 
+    --foreign-asset 36 \
+    --box "$APP_ID,b64:AAAAAAAAACSyoe4P+GYzSlKficYnyPm/4M9uctPzvSGd7jhSUQDCjw==" 
 
 
 ## transactions to buy a DRT
@@ -84,4 +84,12 @@ goal clerk sign -i buyGroupedTxns.tx -o signoutbuy.tx
 goal clerk rawsend -f signoutbuy.tx
 
 # --box "b64:AAAAAAAAAAv+Wgeg6daJwBdXLMa6VuVZJFiG88hV7E/BJj10KFLmDQ==" \
+
+goal app call \
+    --app-id $APP_ID \
+    -f $ACCOUNT_1 \
+    --app-arg "str:update_drt_price" \
+    --app-arg "int:1000000" \
+    --box "b64:AAAAAAAAACSyoe4P+GYzSlKficYnyPm/4M9uctPzvSGd7jhSUQDCjw==" \
+    --foreign-asset 36
 
