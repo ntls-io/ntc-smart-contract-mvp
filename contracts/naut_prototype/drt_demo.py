@@ -34,7 +34,7 @@ def approval():
     op_init_contract = Bytes("init_contract")                           # Method call
     op_drt_ownership_change = Bytes("drt_owner_change")                 # Method call
     op_drt_to_box = Bytes("drt_to_box")                                 # Method Call 
-    op_con_ownership_change = Bytes("contributor_owner_change")         # Method Calls
+    op_con_ownership_change = Bytes("contributor_owner_change")         # Method Call
     
     @Subroutine(TealType.none)
     def defaultTransactionChecks(txnId: Expr):
@@ -183,11 +183,12 @@ def approval():
             asset_id.store(inner_asset_create_txn(Txn.application_args[1],DRT_UNIT_NAME ,Txn.application_args[2], Txn.application_args[3] ,Txn.application_args[4], Txn.application_args[5])),
             #store DRT price in contract alongside asset id in globals
             exchangeRate_supply.store(Concat(Txn.application_args[6],Txn.application_args[2])),
-            App.globalPut(itoa(asset_id.load()),exchangeRate_supply.load()),
             #incremement counter
             App.globalPut(global_drt_counter, App.globalGet(global_drt_counter) + Int(1)),
             
-            Approve(),
+            App.globalPut(itoa(asset_id.load()), exchangeRate_supply.load()),
+            
+            Approve()
         )
 
 # Function to initiliase the creation of a DRT, incorporates the inner_asset_create_txn function
@@ -221,9 +222,7 @@ def approval():
             
             App.box_put(drt_box_name, drt_variables),
             
-            App.globalPut(Bytes("test_number_sup"), supply),
-            App.globalPut(Bytes("test_number_ex"), exchange_rate),
-            
+            App.globalDel(itoa(asset_id)),
             Approve()
         )
 
@@ -294,7 +293,6 @@ def approval():
             # store newly created asset ID, address, variables in global variables
             App.globalPut(global_new_contributor, contrib_id.load()),
             App.globalPut(global_new_contributor_address,Txn.accounts[1]),
-            #App.globalPut(global_new_contributor_variables, Concat(Itob(App.globalGet(global_drt_payment_row_average)),Itob(Btoi(Txn.application_args[1])))),
            
            #test and register added account as owner
             App.globalPut(global_new_contributor_variables, Concat(Itob(App.globalGet(global_drt_payment_row_average)),Itob(Btoi(Txn.application_args[1])), added_account)),
@@ -309,15 +307,14 @@ def approval():
             Approve(),
         )
 
-# Function to update the global variable to a new data package hash. 
+# Function to update the price of a DRT. 
     @Subroutine(TealType.none)
     def update_drt_price():
-        drt_exist = App.globalGetEx(Int(0), itoa(Txn.assets[0])) #Int(0) represnets the smart contract address
         btoi_rate = Btoi(Txn.application_args[1])
+        drt_box_name = Concat(Itob(Txn.assets[0]),Global.current_application_address())
         
         init = App.globalGet(global_init)
         return Seq(
-            drt_exist,
             #basic sanity checks
             defaultTransactionChecks(Int(0)),
             program.check_self(
@@ -329,14 +326,13 @@ def approval():
                 And(
                     #ensure the transaction sender is the nautilus wallet address
                     Txn.sender() == Global.creator_address(),
-                    #ensure that this drt exists
-                    drt_exist.hasValue(),
-                    
-                    init != Int(1),
+                    #ensure price is at least 1 Algo = 1000000 micro algos
+                    btoi_rate >= Int(1000000),
+                    init != Int(0),
                 )
             ),
-            #store new price
-            App.globalPut(itoa(Txn.assets[0]),btoi_rate),
+            #change current exchange rate 
+            App.box_replace(drt_box_name, Int(0), Itob(btoi_rate)),
 
             Approve(),
         )
