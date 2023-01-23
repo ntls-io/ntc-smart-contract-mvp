@@ -1,11 +1,9 @@
-echo "Test"
-echo ""
-ASSET_ID=303
-
+echo "Optin to asset ID from buyer of contributor"
 goal asset optin \
     --assetid $ASSET_ID \
     --account $ACCOUNT_2 
 
+echo "initiate transfer and pay royalty fees to register new ownerhsip"
 
 goal asset send \
     --assetid $ASSET_ID \
