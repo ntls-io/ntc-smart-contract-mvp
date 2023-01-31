@@ -5,7 +5,7 @@ import pytest
 from algosdk import account, encoding
 from algosdk.logic import get_application_address
 
-from operations import completeDataPoolSetup,deployContract, initialiseDataPool, claimContributor,placeBid, closeAuction
+from operations import completeDataPoolSetup,deployContract, initialiseDataPool, claimContributor
 from helpers.util import getBalances, getAppGlobalState, getLastBlockTimestamp
 from helpers.setup import getAlgodClient
 from helpers.resources import getTemporaryAccount, optInToAsset, createDummyAsset
