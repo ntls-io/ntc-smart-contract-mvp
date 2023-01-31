@@ -169,8 +169,7 @@ def approval():
                 And(
                     #ensure the transaction sender is the data_creator , i.e. the creator of the smart contract
                     Txn.sender() == Global.creator_address(),
-                    #ensure there is less than 50 drt counter
-                    App.globalGet(global_drt_counter) < Int(50),
+
                     #ensure there is atleast 2 arguments
                     Txn.application_args.length() == Int(7), # instruction, name, amount, url of binary, hash of binary, note, exchange price
 
@@ -472,7 +471,7 @@ def approval():
             contrib_id.store(inner_asset_create_txn(Bytes("Contributor"),Bytes("CONTRIB") ,Bytes("1"),itoa(Global.current_application_id()), DEFAULT_HASH, DEFAULT_NOTE)), #use scratch variable to store asset id of contributor token
          
             # store newly created asset ID, address, variables in global variables
-            App.globalPut(global_new_contributor, contrib_id.load()),
+            App.globalPut(global_new_contributor, Itob(contrib_id.load())),
             App.globalPut(global_new_contributor_address,Txn.accounts[1]),
             App.globalPut(global_new_contributor_variables, Concat(Itob(App.globalGet(global_drt_payment_row_average)),Itob(Btoi(Txn.application_args[1])),Txn.accounts[1] )),
 
@@ -515,7 +514,7 @@ def approval():
                     #ensure contributor vareiables are not zero
                     new_contributor_variables != Bytes(""),
                     #ensure asset references is the new_contributor_asset
-                    Txn.assets[0] == new_contributor_asset,
+                    #Txn.assets[0] == Btoi(new_contributor_asset),
                 
                 )
             ),
@@ -656,8 +655,6 @@ def approval():
                     init != Int(0),
                 )
             ),
-            App.globalPut(Bytes("asset_sender"),  Gtxn[0].sender()),
-            App.globalPut(Bytes("asset_ID"),  Gtxn[0].xfer_asset()),
             
             #change current supply of previous owner
             current_owner_new_supply.store(current_owner_supply.load() - assetAmountBought),
