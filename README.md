@@ -21,28 +21,21 @@
    ```
 5. Use Python interpreter: `./venv/Scripts/python.exe`
    VSCode: `Python: Select Interpreter`
+   
+6. Install dependencies:
+   ```txt
+   $ pip install -r requirements.txt
+   ```
+7. Set PythonPath :
+   ```txt
+   $ export PYTHONPATH=.
+   ```
+8. Run Deployment Test:
+   ```txt
+   $ python run [PATHTOFILE]/scripts/test_SmartContractDeployment.py 
+   ```
 
-# How to run
-
-1. Follow the setup instructions above.
-2. Build the smart contract
-```txt
-$ ./build.sh contracts.naut_prototype.drt_demo
-```
-3. Enter sandbox
-```txt
-$ ./sandbox enter algod
-```
-4. In sandbox, deploy and create smart contract
-```txt
-$ source /data/create.sh
-```
-## Run Test
-
-In sandbox, directly after you have created the smart contract, run
-```txt
-$ source /data/test.sh 
-```
+When finished, the sandbox can be stopped with ./sandbox down
 
 # Interact with Smart Contract Manually
 
