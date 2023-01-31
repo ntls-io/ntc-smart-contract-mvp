@@ -1,4 +1,4 @@
-# Setup
+# Development Setup
 
 1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop)
 2. Install [Algorand sandbox](https://github.com/algorand/sandbox)
