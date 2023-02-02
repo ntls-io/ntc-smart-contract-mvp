@@ -7,7 +7,7 @@ from algosdk.logic import get_application_address
 from algosdk import account, encoding
 from pyteal import compileTeal, Mode
 from contracts.naut_prototype.drt_demo import approval,clear
-from pyteal_helpers.strings import itoa
+from contracts.pyteal_helpers.strings import itoa
 from base64 import b64decode
 from helpers.resources import getTemporaryAccount, optInToAsset, createDummyAsset
 

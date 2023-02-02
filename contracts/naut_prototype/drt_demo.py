@@ -1,7 +1,7 @@
 from pyteal import *
 from pyteal.ast.bytes import Bytes
-from pyteal_helpers import program
-from pyteal_helpers.strings import itoa
+from contracts.pyteal_helpers import program
+from contracts.pyteal_helpers.strings import itoa
 from algosdk import *
 
 DRT_UNIT_NAME = Bytes("DRT") #need to confirm
