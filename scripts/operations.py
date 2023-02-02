@@ -107,24 +107,23 @@ def initialiseDataPool(
     appendDRTPrice,
     
 ):
-    """Finish setting up an auction.
+    """Initialise the data pool.
 
-    This operation funds the app auction escrow account, opts that account into
-    the NFT, and sends the NFT to the escrow account, all in one atomic
-    transaction group. The auction must not have started yet.
-
-    The escrow account requires a total of 0.203 Algos for funding. See the code
-    below for a breakdown of this amount.
+    This operation funds the app data pool account, initialises the variables for the data pool
+    and creates the contributor token for the initial contribution. This is step 2 of 3 for the 
+    complete creation of the data pool.
 
     Args:
         client: An algod client.
         appID: The app ID of the auction.
-        funder: The account providing the funding for the escrow account.
-        nftHolder: The account holding the NFT.
-        nftID: The NFT ID.
-        nftAmount: The NFT amount being auctioned. Some NFTs has a total supply
-            of 1, while others are fractional NFTs with a greater total supply,
-            so use a value that makes sense for the NFT being auctioned.
+        funder: The account providing the funding for the smart contract (creator).
+        fundingAmount: The amount to fund the smart contract
+        enclave: account of the enclave,
+        noRowsContributed: numbner of rows contributed by the creator,
+        dataPackageHash: the hash of the data package,
+        appendDRTName: the name of the appendDRT,
+        appendDRTUnitName: the unit name of the appendDRT,
+        appendDRTPrice: the price of the appendDRT in microAlgos,
     """
     appAddr = get_application_address(appID)
 
