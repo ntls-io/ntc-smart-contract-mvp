@@ -1,8 +1,8 @@
 import importlib
 import sys
 
-from pyteal_helpers import program
-from pyteal_helpers import utils
+from contracts.pyteal_helpers import program
+from contracts.pyteal_helpers import utils
 
 if __name__ == "__main__":
     module = sys.argv[1]

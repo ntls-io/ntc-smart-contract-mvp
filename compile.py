@@ -1,7 +1,7 @@
 import importlib
 import sys
 
-from pyteal_helpers import program
+from contracts.pyteal_helpers import program
 
 if __name__ == "__main__":
     mod = sys.argv[1]
