@@ -24,7 +24,7 @@ CLEAR_STATE_PROGRAM = b""
 
 
 def getContracts(client: AlgodClient) -> Tuple[bytes, bytes]:
-    """Get the compiled TEAL contracts for the auction.
+    """Get the compiled TEAL contracts for the =the.
 
     Args:
         client: An algod client that has the ability to compile TEAL programs.

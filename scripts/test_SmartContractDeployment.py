@@ -11,8 +11,6 @@ from helpers.setup import getAlgodClient
 from helpers.resources import getTemporaryAccount, optInToAsset, createDummyAsset
 from base64 import b64decode, b64encode
 
-
-
 client = getAlgodClient()
 
 creator = getTemporaryAccount(client)
