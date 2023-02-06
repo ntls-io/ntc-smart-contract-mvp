@@ -23,7 +23,7 @@ print("Enclave (enclacve account):", enclave.getAddress())
 print("Bob (buyer account):", buyer.getAddress())
 print("Carla (data contributor account)", contributor.getAddress(), "\n")
 
-appID,appAccount,appendDRT,contributorDRT_1 = completeDataPoolSetup(
+appID, appAccount, appendDRT, contributorDRT_1 = completeDataPoolSetup(
     client=client, 
     creator=creator, 
     enclave=enclave, 

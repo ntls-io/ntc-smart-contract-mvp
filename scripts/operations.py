@@ -24,7 +24,7 @@ CLEAR_STATE_PROGRAM = b""
 
 
 def getContracts(client: AlgodClient) -> Tuple[bytes, bytes]:
-    """Get the compiled TEAL contracts for the =the.
+    """Get the compiled TEAL contracts for the blockchain.
 
     Args:
         client: An algod client that has the ability to compile TEAL programs.
@@ -101,12 +101,12 @@ def initialiseDataPool(
     fundingAmount: int,
     enclave: Account,
     noRowsContributed: int,
-    dataPackageHash,
-    appendDRTName,
-    appendDRTUnitName,
-    appendDRTPrice,
+    dataPackageHash: str,
+    appendDRTName: str,
+    appendDRTUnitName: str,
+    appendDRTPrice: int,
     
-):
+) -> Tuple[int, int]:
     """Initialise the data pool.
 
     This operation funds the app data pool account, initialises the variables for the data pool
@@ -166,7 +166,7 @@ def initialiseDataPool(
 
     signedSetupTxn = setupTxn.sign(enclave.getPrivateKey())
     txid = client.send_transaction(signedSetupTxn)
-    #print("Successfully sent transaction with txID: {}".format(txid))
+   
     try:
         response = waitForTransaction(client, txid)  
         appendDRT = response.innerTxns[0]['asset-index']
@@ -177,7 +177,7 @@ def initialiseDataPool(
       
     except Exception as err:
         print(err)
-        return
+        return err
 
 
 def claimContributor(
@@ -218,7 +218,6 @@ def claimContributor(
     )
 
     signedTxn = claimTxn.sign(contributorAccount.getPrivateKey())
-    #print(signedTxn)
 
     txid = client.send_transaction(signedTxn)
 
@@ -229,7 +228,7 @@ def claimContributor(
       
     except Exception as err:
         print(err)
-        return
+        return err
 
 def completeDataPoolSetup(
     client: AlgodClient,
@@ -237,21 +236,26 @@ def completeDataPoolSetup(
     enclave: Account,
     fundingAmount: int,
     noRowsContributed: int,
-    dataPackageHash,
-    appendDRTName,
-    appendDRTUnitName,
-    appendDRTPrice,
+    dataPackageHash: str,
+    appendDRTName: str,
+    appendDRTUnitName: str,
+    appendDRTPrice: int,
     ):
-    appID = deployContract(
-        client=client,
-        sender=creator,
-        enclave=enclave
-    )
+     
+    try:
+        appID = deployContract(
+         client=client,
+         sender=creator,
+         enclave=enclave) 
+    except Exception as err:
+        print(err)
+        return err
 
-    actual = getAppGlobalState(client, appID)
     appAccount = get_application_address(appID)
 
-    appendDRT,contributorDRT_1 = initialiseDataPool(
+
+    try:
+       appendDRT,contributorDRT_1 = initialiseDataPool(
         client=client,
         appID=appID,
         funder=creator,
@@ -262,11 +266,24 @@ def completeDataPoolSetup(
         appendDRTName=appendDRTName,
         appendDRTUnitName=appendDRTUnitName,
         appendDRTPrice=appendDRTPrice,
-    )
+    ) 
+    except Exception as err:
+        print(err)
+        return err
+    
 
     optInToAsset(client, contributorDRT_1, creator)
 
-    contributorClaim = claimContributor(client=client,appID=appID,contributorAccount=creator,contributorAssetID=contributorDRT_1)
+    try:
+        contributorClaim = claimContributor(
+            client=client,
+            appID=appID,
+            contributorAccount=creator,
+            contributorAssetID=contributorDRT_1
+            )
+    except Exception as err:
+        print(err)
+        return err
 
     box_stored = b64decode(client.application_box_by_name(appID, bytes(str(contributorDRT_1), "utf-8"))['name']).decode("utf-8")
     contributor_transferred = client.account_asset_info(creator.getAddress(), contributorDRT_1)["asset-holding"]["asset-id"]
