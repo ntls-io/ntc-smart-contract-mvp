@@ -2,7 +2,7 @@ from typing import Tuple, List
 import json
 
 from algosdk.v2client.algod import AlgodClient
-from algosdk.future import transaction
+from algosdk import transaction
 from algosdk.logic import get_application_address
 from algosdk import account, encoding
 from pyteal import compileTeal, Mode
@@ -18,6 +18,7 @@ from helpers.util import (
     fullyCompileContract,
     getAppGlobalState,
 )
+from scripts.helpers.util import PendingTxnResponse
 
 APPROVAL_PROGRAM = b""
 CLEAR_STATE_PROGRAM = b""
@@ -38,7 +39,7 @@ def getContracts(client: AlgodClient) -> Tuple[bytes, bytes]:
 
     if len(APPROVAL_PROGRAM) == 0:
         APPROVAL_PROGRAM = fullyCompileContract(client, approval())
-        CLEAR_STATE_PROGRAM = fullyCompileContract(client,clear())
+        CLEAR_STATE_PROGRAM = fullyCompileContract(client, clear())
 
     return APPROVAL_PROGRAM, CLEAR_STATE_PROGRAM
 
@@ -171,11 +172,11 @@ def initialiseDataPool(
         response = waitForTransaction(client, txid)  
         appendDRT = response.innerTxns[0]['asset-index']
         contributorDRT_1 = response.innerTxns[1]['asset-index']
-        result = [appendDRT, contributorDRT_1]
         print("Smart Contract successfully initialised.")
-        return result
+        return [appendDRT, contributorDRT_1]
       
     except Exception as err:
+        print("Uknown error..")
         print(err)
         return err
 
@@ -227,6 +228,7 @@ def claimContributor(
         return response
       
     except Exception as err:
+        print("Uknown error..")
         print(err)
         return err
 
