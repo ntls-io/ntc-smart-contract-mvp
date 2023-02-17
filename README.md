@@ -32,7 +32,7 @@
    ```
 8. Run Deployment Test:
    ```txt
-   $ python run [PATHTOFILE]/scripts/test_SmartContractDeployment.py 
+   $ python python_sdk/test_operations.py 
    ```
 
 When finished, the sandbox can be stopped with ./sandbox down
