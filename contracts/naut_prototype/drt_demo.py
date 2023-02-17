@@ -9,6 +9,7 @@ CONTRIBUTOR_UNIT_NAME = Bytes("DRT_C") #came up with this by myself, need to con
 DEFAULT_HASH = Bytes("base64", "y9OJ5MRLCHQj8GqbikAUKMBI7hom+SOj8dlopNdNHXI=")
 DEFAULT_NOTE= Bytes("")
 DEFAULT_URL= Bytes("")
+NAUTILUS_EXCHANGE_ID = Int(10001)
 
 def approval():
     # Stored global variables
@@ -35,6 +36,8 @@ def approval():
     op_drt_ownership_change = Bytes("drt_owner_change")                 # Method call
     op_drt_to_box = Bytes("drt_to_box")                                 # Method Call 
     op_con_ownership_change = Bytes("contributor_owner_change")         # Method Call
+    op_de_list_drt = Bytes("de_list_drt")                               # Method Call
+    op_list_drt = Bytes("list_drt")                                     # Method Call
     
     @Subroutine(TealType.none)
     def defaultTransactionChecks(txnId: Expr):
@@ -171,7 +174,7 @@ def approval():
                     Txn.sender() == Global.creator_address(),
 
                     #ensure there is atleast 2 arguments
-                    Txn.application_args.length() == Int(7), # instruction, name, amount, url of binary, hash of binary, note, exchange price
+                    Txn.application_args.length() == Int(6), # instruction, name, amount, url of binary, hash of binary, note, exchange price
 
                     
                     init != Int(0),
@@ -179,9 +182,9 @@ def approval():
             ),
             #create drt and record asset id
             #name: Expr, unit_name: Expr, amount: Expr, asset_url: Expr, binHash: Expr, note: Expr
-            asset_id.store(inner_asset_create_txn(Txn.application_args[1],DRT_UNIT_NAME ,Txn.application_args[2], Txn.application_args[3] ,Txn.application_args[4], Txn.application_args[5])),
+            asset_id.store(inner_asset_create_txn(Txn.application_args[1],DRT_UNIT_NAME ,Txn.application_args[2], Txn.application_args[3] ,Txn.application_args[4], Txn.note())),
             #store DRT price in contract alongside asset id in globals
-            exchangeRate_supply.store(Concat(Txn.application_args[6],Txn.application_args[2])),
+            exchangeRate_supply.store(Concat(Txn.application_args[5],Txn.application_args[2])),
             #incremement counter
             App.globalPut(global_drt_counter, App.globalGet(global_drt_counter) + Int(1)),
             
@@ -197,8 +200,11 @@ def approval():
         drt_variables = App.globalGet(itoa(asset_id))
         supply = ExtractUint64(drt_variables,Int(8))
         exchange_rate = ExtractUint64(drt_variables,Int(0))
-        drt_exists_in_account = AssetHolding.balance(Global.current_application_address(), asset_id)
+        drt_exists_in_account = AssetHolding.balance(Global.current_application_address(), Txn.assets[0])
         drt_box_name = Concat(Itob(Txn.assets[0]),Global.current_application_address())
+        App.box_create(drt_box_name, Int(1000))
+        
+        drt_variables_listed = Concat(drt_variables, Itob(NAUTILUS_EXCHANGE_ID))
         
         init = App.globalGet(global_init)
         return Seq(     
@@ -215,13 +221,13 @@ def approval():
                     exchange_rate != Int(0),
                     drt_exists_in_account.value() == supply,
 
-                    init == Int(1),
+                    init != Int(0),
                 )
             ),
             
-            App.box_put(drt_box_name, drt_variables),
-            
+            App.box_put(drt_box_name, drt_variables_listed),
             App.globalDel(itoa(asset_id)),
+            
             Approve()
         )
 
@@ -278,9 +284,9 @@ def approval():
             ),
             #create append DRT
             #name: Expr, unit_name: Expr, amount: Expr, asset_url: Expr, binHash: Expr, note: Expr
-            append_id.store(inner_asset_create_txn(Txn.application_args[3],Txn.application_args[4] ,Txn.application_args[5], DEFAULT_URL , DEFAULT_HASH, DEFAULT_NOTE)), #use scratch variable to store asset id of contributor token
+            append_id.store(inner_asset_create_txn(Txn.application_args[3],Txn.application_args[4] ,Txn.application_args[5], Txn.application_args[7] , Txn.application_args[8], DEFAULT_NOTE)), #use scratch variable to store asset id of contributor token
             #store price - int(1000000) = 1 Algo
-            App.globalPut(itoa(append_id.load()),Int(1000000)),
+            App.globalPut(itoa(append_id.load()),Btoi(Txn.application_args[6])),
             #store asset id in global variable
             App.globalPut(global_append_asset_id,append_id.load()),
             
@@ -336,6 +342,61 @@ def approval():
             Approve(),
         )
 
+# Function to delist a drt
+    @Subroutine(TealType.none)
+    def de_list_drt():
+        drt_box_name = Concat(Itob(Txn.assets[0]),Global.current_application_address())
+        
+        init = App.globalGet(global_init)
+        return Seq(
+            #basic sanity checks
+            defaultTransactionChecks(Int(0)),
+            program.check_self(
+                group_size=Int(1), #require the fee of this input transaction to cover the fee of the inner tranaction
+                group_index=Int(0),
+            ),
+            program.check_rekey_zero(1),
+            Assert(
+                And(
+                    #ensure the transaction sender is the nautilus wallet address
+                    Txn.sender() == Global.creator_address(),
+                    init != Int(0),
+                )
+            ),
+            #remove current drt listed exchange (Nautilus for MVP)
+            App.box_replace(drt_box_name, Int(16), Itob(Int(0))),
+
+            Approve(),
+        )
+
+# Function to delist a drt
+    @Subroutine(TealType.none)
+    def list_drt():
+        drt_box_name = Concat(Itob(Txn.assets[0]),Global.current_application_address())
+        
+        init = App.globalGet(global_init)
+        return Seq(
+            #basic sanity checks
+            defaultTransactionChecks(Int(0)),
+            program.check_self(
+                group_size=Int(1), #require the fee of this input transaction to cover the fee of the inner tranaction
+                group_index=Int(0),
+            ),
+            program.check_rekey_zero(1),
+            Assert(
+                And(
+                    #ensure the transaction sender is the nautilus wallet address
+                    Txn.sender() == Global.creator_address(),
+                    init != Int(0),
+                )
+            ),
+            #re list drt for sale 
+            App.box_replace(drt_box_name, Int(16), Itob(NAUTILUS_EXCHANGE_ID)),
+
+            Approve(),
+        )
+
+
 
 # Function to buy a created DRT, incorporates the inner_asset_create_txn function
     @Subroutine(TealType.none)
@@ -350,10 +411,12 @@ def approval():
         supply = ScratchVar()
         exchange_rate = ScratchVar()
         new_supply = ScratchVar()
+        listed_for_sale = ScratchVar()
         
         #new owner box details
         new_owner_box_name = Concat(Itob(assetToBuy),Gtxn[0].sender())
         new_owner_box_variables = ScratchVar()
+        App.box_create(new_owner_box_name, Int(1000))
         
         init = App.globalGet(global_init)
         return Seq(
@@ -361,6 +424,7 @@ def approval():
             box_contents := App.box_get(drt_box_name), 
             exchange_rate.store(ExtractUint64(box_contents.value(),Int(0))),
             supply.store(ExtractUint64(box_contents.value(),Int(8))),
+            listed_for_sale.store(ExtractUint64(box_contents.value(),Int(16))),
 
             defaultTransactionChecks(Int(0)),  # Perform default transaction checks
             defaultTransactionChecks(Int(1)), # Perform default transaction checks
@@ -382,7 +446,9 @@ def approval():
                     supply.load() >= Btoi(Gtxn[0].application_args[1]), #ensure there is enough supply
                     Gtxn[0].application_args.length() == Int(2),   #ensure there is atleast 2 arguments
                     Gtxn[0].sender() == Gtxn[1].sender(),
- 
+
+                    listed_for_sale.load() == NAUTILUS_EXCHANGE_ID,
+                    
                     init == Int(1),
                 )
             ),
@@ -399,7 +465,7 @@ def approval():
             new_owner_box_variables.store(Btoi(Gtxn[0].application_args[1])),
             App.box_put(new_owner_box_name, Itob(new_owner_box_variables.load())),
             
-             # if the above checks out, transfer asset
+            # if the above checks out, transfer asset
             inner_asset_transfer_txn(assetToBuy, Btoi(Gtxn[0].application_args[1]), Gtxn[0].sender()),
             
             Approve(),
@@ -819,8 +885,14 @@ def approval():
                     Txn.application_args[0] == op_con_ownership_change,
                     contributor_ownership_change()
                 ],
-               
-                 
+                [
+                    Txn.application_args[0] == op_de_list_drt,
+                    de_list_drt()
+                ],
+                [
+                    Txn.application_args[0] == op_list_drt,
+                    list_drt()
+                ],
             ),
             Reject(),
         ),

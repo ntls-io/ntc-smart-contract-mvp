@@ -122,3 +122,11 @@ def boxNameContributor(contributorAssetID: int) -> bytes:
    
     
     return contributorAssetID
+
+
+def hasOptedIn(client: AlgodClient, account: str, assetID: int):
+    account_balances = getBalances(client=client,account=account)
+    
+    for key,value in account_balances.items():
+        if key == assetID and value >= 0:  
+            return 1

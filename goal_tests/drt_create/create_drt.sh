@@ -10,7 +10,6 @@ goal app call \
     --app-arg "int:10000" \
     --app-arg "str:https://code_binary_url" \
     --app-arg "str:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" \
-    --app-arg "str:note" \
     --app-arg "int:1000000" 
 
 echo ""
