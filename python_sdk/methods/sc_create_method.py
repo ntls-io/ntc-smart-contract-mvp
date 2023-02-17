@@ -18,7 +18,7 @@ from helpers.util import (
     fullyCompileContract,
     getAppGlobalState,
 )
-from scripts.helpers.util import PendingTxnResponse
+from python_sdk.helpers.util import PendingTxnResponse
 
 APPROVAL_PROGRAM = b""
 CLEAR_STATE_PROGRAM = b""
@@ -105,8 +105,10 @@ def initialiseDataPool(
     dataPackageHash: str,
     appendDRTName: str,
     appendDRTUnitName: str,
+    appendDRTSupply: int,
     appendDRTPrice: int,
-    
+    appendDRTBinaryUrl: str,
+    appendDRTBinaryHash: str,
 ) -> Tuple[int, int]:
     """Initialise the data pool.
 
@@ -124,6 +126,7 @@ def initialiseDataPool(
         dataPackageHash: the hash of the data package,
         appendDRTName: the name of the appendDRT,
         appendDRTUnitName: the unit name of the appendDRT,
+        appendDRTSupply: the total supply of appendDRTs, 
         appendDRTPrice: the price of the appendDRT in microAlgos,
     """
     appAddr = get_application_address(appID)
@@ -148,7 +151,10 @@ def initialiseDataPool(
         dataPackageHash,
         appendDRTName,
         appendDRTUnitName,
-        appendDRTPrice,  
+        appendDRTSupply,
+        appendDRTPrice,
+        appendDRTBinaryUrl,
+        appendDRTBinaryHash,
     ]
     
     accounts = [
@@ -242,6 +248,9 @@ def completeDataPoolSetup(
     appendDRTName: str,
     appendDRTUnitName: str,
     appendDRTPrice: int,
+    appendDRTSupply:int,
+    appendDRTBinaryUrl: str,
+    appendDRTBinaryHash: str,
     ):
      
     try:
@@ -267,7 +276,10 @@ def completeDataPoolSetup(
         dataPackageHash=dataPackageHash,
         appendDRTName=appendDRTName,
         appendDRTUnitName=appendDRTUnitName,
+        appendDRTSupply=appendDRTSupply,
         appendDRTPrice=appendDRTPrice,
+        appendDRTBinaryUrl=appendDRTBinaryUrl,
+        appendDRTBinaryHash=appendDRTBinaryHash
     ) 
     except Exception as err:
         print(err)

@@ -67,9 +67,12 @@ goal app call \
     --app-arg "str:DGVWUSNA--init--ASUDBQ" \
     --app-arg "str:Append_DRT" \
     --app-arg "str:DRT" \
+    --app-arg "int:1000" \
     --app-arg "int:1000000" \
-    --app-account $ACCOUNT_1 
-    
+    --app-arg "str:binary_url" \
+    --app-arg "str:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" \
+    --app-account $ACCOUNT_1  
+
 echo ""
 export APPEND_ID=$(goal app read --global --app-id $APP_ID --guess-format | awk -F'"' '{print $2}' | head -2 | tail -1)
 echo "Store Append token ID: APPEND_ID=$APPEND_ID"
