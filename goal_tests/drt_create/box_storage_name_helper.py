@@ -10,6 +10,7 @@ asset_bytes = asset_id.to_bytes(8, 'big')
 print(asset_bytes)
 pk = decode_address(address_1)
 print(pk)
+
 box_name = asset_bytes + pk
 #pk_2 = decode_address(address_2)
 #box_name_2 = asset_bytes + pk_2

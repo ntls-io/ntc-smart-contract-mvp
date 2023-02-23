@@ -1,6 +1,6 @@
 from typing import Tuple, List
 import json
-
+from algosdk.encoding import decode_address
 from algosdk.v2client.algod import AlgodClient
 from algosdk import transaction
 from algosdk.logic import get_application_address
@@ -187,11 +187,12 @@ def initialiseDataPool(
         return err
 
 
-def claimContributor(
+def init_claimContributor(
     client: AlgodClient,
     appID: int,
     contributorAccount: Account,
     contributorAssetID: int,
+    appendAssetID: int
 ):
     """Claim contributor token.
 
@@ -212,7 +213,14 @@ def claimContributor(
     
     assets = [
         contributorAssetID,
+        appendAssetID,
     ]
+    
+    appAddr = get_application_address(appID)
+    asset_bytes = appendAssetID.to_bytes(8, 'big')
+    pk = decode_address(appAddr)
+
+    box_name = asset_bytes + pk
     
     claimTxn = transaction.ApplicationCallTxn(
         sender=contributorAccount.getAddress(),
@@ -221,7 +229,7 @@ def claimContributor(
         app_args=appArgs,
         foreign_assets=assets,
         sp=suggestedParams,
-        boxes=[[appID, str(contributorAssetID)]],
+        boxes=[[appID, str(contributorAssetID)],[appID, box_name]],
     )
 
     signedTxn = claimTxn.sign(contributorAccount.getPrivateKey())
@@ -259,6 +267,7 @@ def completeDataPoolSetup(
          sender=creator,
          enclave=enclave) 
     except Exception as err:
+        print("Deploy Contract err")
         print(err)
         return err
 
@@ -282,6 +291,7 @@ def completeDataPoolSetup(
         appendDRTBinaryHash=appendDRTBinaryHash
     ) 
     except Exception as err:
+        print("Intialise Data Pool err")
         print(err)
         return err
     
@@ -289,13 +299,15 @@ def completeDataPoolSetup(
     optInToAsset(client, contributorDRT_1, creator)
 
     try:
-        contributorClaim = claimContributor(
+        contributorClaim = init_claimContributor(
             client=client,
             appID=appID,
             contributorAccount=creator,
-            contributorAssetID=contributorDRT_1
+            contributorAssetID=contributorDRT_1,
+            appendAssetID=appendDRT
             )
     except Exception as err:
+        print("Claim Contributor Error")
         print(err)
         return err
 

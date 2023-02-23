@@ -199,10 +199,9 @@ def approval():
         
         drt_variables = App.globalGet(itoa(asset_id))
         supply = ExtractUint64(drt_variables,Int(8))
-        exchange_rate = ExtractUint64(drt_variables,Int(0))
-        drt_exists_in_account = AssetHolding.balance(Global.current_application_address(), Txn.assets[0])
-        drt_box_name = Concat(Itob(Txn.assets[0]),Global.current_application_address())
-        App.box_create(drt_box_name, Int(1000))
+        drt_exists_in_account = AssetHolding.balance(Global.current_application_address(), asset_id)
+        drt_box_name = Concat(Itob(asset_id),Global.current_application_address())
+        
         
         drt_variables_listed = Concat(drt_variables, Itob(NAUTILUS_EXCHANGE_ID))
         
@@ -217,15 +216,13 @@ def approval():
                     #check the sender is equal to the account who sent the append drt and wants to be a contributor
                     Txn.sender() == Global.creator_address(),
                     #ensure drt was properly created
-                    supply != Int(0),
-                    exchange_rate != Int(0),
                     drt_exists_in_account.value() == supply,
 
                     init != Int(0),
                 )
             ),
-            
-            App.box_put(drt_box_name, drt_variables_listed),
+            Pop(App.box_create(drt_box_name, Int(1000))),
+            App.box_replace(drt_box_name,Int(0), drt_variables_listed),
             App.globalDel(itoa(asset_id)),
             
             Approve()
@@ -285,11 +282,11 @@ def approval():
             #create append DRT
             #name: Expr, unit_name: Expr, amount: Expr, asset_url: Expr, binHash: Expr, note: Expr
             append_id.store(inner_asset_create_txn(Txn.application_args[3],Txn.application_args[4] ,Txn.application_args[5], Txn.application_args[7] , Txn.application_args[8], DEFAULT_NOTE)), #use scratch variable to store asset id of contributor token
-            #store price - int(1000000) = 1 Algo
-            App.globalPut(itoa(append_id.load()),Btoi(Txn.application_args[6])),
+            #store price and supply and listed for sale - int(1000000) = 1 Algo
+            App.globalPut(itoa(append_id.load()),Concat(Txn.application_args[6], Txn.application_args[5])),
             #store asset id in global variable
             App.globalPut(global_append_asset_id,append_id.load()),
-            
+                
             #create contributor token
             #store smart contract ID in asset URL field
             #name: Expr, unit_name: Expr, amount: Expr, asset_url: Expr, binHash: Expr, note: Expr
@@ -297,7 +294,7 @@ def approval():
             
             # store newly created asset ID, address, variables in global variables
             App.globalPut(global_new_contributor, contrib_id.load()),
-            App.globalPut(global_new_contributor_address,Txn.accounts[1]),
+            App.globalPut(global_new_contributor_address, added_account),
            
            #test and register added account as owner
             App.globalPut(global_new_contributor_variables, Concat(Itob(App.globalGet(global_drt_payment_row_average)),Itob(Btoi(Txn.application_args[1])), added_account)),
@@ -397,7 +394,6 @@ def approval():
         )
 
 
-
 # Function to buy a created DRT, incorporates the inner_asset_create_txn function
     @Subroutine(TealType.none)
     def buy_drt():
@@ -416,7 +412,7 @@ def approval():
         #new owner box details
         new_owner_box_name = Concat(Itob(assetToBuy),Gtxn[0].sender())
         new_owner_box_variables = ScratchVar()
-        App.box_create(new_owner_box_name, Int(1000))
+        
         
         init = App.globalGet(global_init)
         return Seq(
@@ -537,7 +533,7 @@ def approval():
             contrib_id.store(inner_asset_create_txn(Bytes("Contributor"),Bytes("CONTRIB") ,Bytes("1"),itoa(Global.current_application_id()), DEFAULT_HASH, DEFAULT_NOTE)), #use scratch variable to store asset id of contributor token
          
             # store newly created asset ID, address, variables in global variables
-            App.globalPut(global_new_contributor, Itob(contrib_id.load())),
+            App.globalPut(global_new_contributor, contrib_id.load()),
             App.globalPut(global_new_contributor_address,Txn.accounts[1]),
             App.globalPut(global_new_contributor_variables, Concat(Itob(App.globalGet(global_drt_payment_row_average)),Itob(Btoi(Txn.application_args[1])),Txn.accounts[1] )),
 
@@ -553,12 +549,14 @@ def approval():
     @Subroutine(TealType.none)
     def contributor_to_box_and_transfer():
         #store senders asset holdings of contributor token to check for opting in 
-        contributorOptIn = AssetHolding.balance(Txn.sender(), App.globalGet(global_new_contributor))
+        contributorOptIn = AssetHolding.balance(Txn.sender(), Txn.assets[0])
         
         #grab contributor global details
         new_contributor_account = App.globalGet(global_new_contributor_address)
         new_contributor_asset = App.globalGet(global_new_contributor)
         new_contributor_variables = App.globalGet(global_new_contributor_variables)
+        
+        
         
         init = App.globalGet(global_init)
         return Seq(     
@@ -566,36 +564,31 @@ def approval():
             defaultTransactionChecks(Int(0)),  # Perform default transaction checks
             program.check_rekey_zero(1),
             contributorOptIn,
+
             Assert(
                 And(
 
                     #check the sender is equal to the account who sent the append drt and wants to be a contributor
                     Txn.sender() == new_contributor_account,
-                    #check sender has opted in to contributor token
+                    #sender_test.load() == Int(1),
+                    # #check sender has opted in to contributor token
                     contributorOptIn.hasValue(),
-                    #ensure contributor vareiables are not zero
+                    # #ensure contributor vareiables are not zero
                     new_contributor_account != Bytes(""),
-                    #ensure contributor vareiables are not zero
+                    # #ensure contributor vareiables are not zero
                     new_contributor_asset != Int(0),
-                    #ensure contributor vareiables are not zero
+                    # #ensure contributor vareiables are not zero
                     new_contributor_variables != Bytes(""),
                     #ensure asset references is the new_contributor_asset
-                    #Txn.assets[0] == Btoi(new_contributor_asset),
+                    Txn.assets[0] == new_contributor_asset,
                 
-                )
-            ),
-            #end initialisation if its the first contribution
-            If(init == Int(0))
-            .Then(
-                App.globalPut(global_init, Int(1))
-            ),
-         
+                ),
+             ),    
             #store asset in box storage with variables
             #by referencing the correct box name in the box array of the transaction and by only using
             # the global variable holding the asset ID, we inherently check that the correct
             # box reference is being used as the name for the box storage
             App.box_put(itoa(new_contributor_asset),new_contributor_variables),
-            
             
             #transfer asset
             inner_asset_transfer_txn(Txn.assets[0], Int(1), Txn.sender()),
@@ -605,7 +598,20 @@ def approval():
             App.globalDel(global_new_contributor_address),
             App.globalDel(global_new_contributor_variables),
             
-            Approve(),
+            #end initialisation if its the first contribution
+            If(init == Int(0))
+            .Then(
+                App.globalPut(global_init, Int(1)),
+                Pop(App.box_create(Concat(Itob(Txn.assets[1]),Global.current_application_address()), Int(1000))),
+                
+                App.box_replace(Concat(Itob(Txn.assets[1]),Global.current_application_address()), Int(0) ,Concat(App.globalGet(itoa(Txn.assets[1])), Itob(NAUTILUS_EXCHANGE_ID))),
+                App.globalDel(itoa(Txn.assets[1])),
+                
+                Approve(),
+            ).Else(
+                Approve(),
+            )
+            
         )
  
 # Function to claim royalty fee from the ownership of a contributor token

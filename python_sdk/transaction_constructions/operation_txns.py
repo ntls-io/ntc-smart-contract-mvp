@@ -235,11 +235,6 @@ def buyDRT_txn(
     box_name_existing = asset_bytes + pk_appAddr
     box_name_new = asset_bytes + pk_buyer
     
-    #check user has opted in
-    optedIn = hasOptedIn(client=client, account=buyer.getAddress() ,assetID=drtID)
-    if optedIn == None:
-        optInToAsset(client=client,assetID=drtID, account=buyer)
-    
     appArgs = [
         b"buy_drt",
         amountToBuy,
@@ -271,3 +266,112 @@ def buyDRT_txn(
 
 
     return [buyDRTTxn, paymentTxn]
+
+
+def appendRedeemDRT_txn(
+    client: AlgodClient,
+    appID: int,
+    redeemer: Account,
+    enclave: Account,
+    appendID: int,
+    assetAmount: int,
+    rowsContributed: int,
+    newHash: str,
+    enclaveApproval: int,
+    
+):
+    """Redeem the append DRT function.
+
+    This function constructs the group transaction that is used when a append DRT is redeemed. i.e when a user wants to contribute data to the pool
+    Transaction 1 transfers the append DRT back to the smart contract
+    Transaction 2 issues the "add_data_contributor" instruction to the smart contract sent from the enclaves account after validation
+
+    Args:
+        client: An algod client.
+        appID: The app ID of the auction.
+        redeemer: The account of the user redeeming the append DRT
+        enclave: The account of the enclave validating the incoming data
+        appendID: The asset ID of the append DRT
+        assetAmount: The amount of assets of the append DRT being redeemed, always 1
+        rowsContributed: The amount of rows of data contributed to the pool
+        newHash: The new hash of the data pool including the incoming data provided by the enclave
+        enclaveApproval: The payment amount sent to the smart contract to buy the DRT(s)
+        
+    """
+    suggestedParams = client.suggested_params()
+    appAddr = get_application_address(appID)
+    
+    assetTransferTxn = transaction.AssetTransferTxn(
+        sender=redeemer.getAddress(),
+        receiver=appAddr,
+        index=appendID,
+        amt=assetAmount,
+        sp=client.suggested_params(),
+    )
+    
+    
+    appArgs = [
+        b"add_data_contributor",
+        rowsContributed,
+        newHash,
+        enclaveApproval,
+    ]
+    
+    addContributorTxn =  transaction.ApplicationCallTxn(
+        sender=enclave.getAddress(),
+        index=appID,
+        on_complete=transaction.OnComplete.NoOpOC,
+        app_args=appArgs,
+        sp=suggestedParams,
+        accounts=[redeemer.getAddress()],
+    )
+    
+    # get group id and assign it to transactions
+    gid = transaction.calculate_group_id([assetTransferTxn, addContributorTxn])
+
+    assetTransferTxn.group = gid
+    addContributorTxn.group = gid
+
+
+    return [assetTransferTxn, addContributorTxn]
+
+
+
+def claimContributor_txn(
+    client: AlgodClient,
+    appID: int,
+    contributorAccount: Account,
+    contributorAssetID: int,
+):
+    """Claim contributor token.
+
+    Args:
+        client: An algod client.
+        contributorAccount: The account that contributor data and needs to claim their token
+        contributorAssetID: The asset ID of the contributor token.
+
+
+    Returns:
+        success or err.
+    """  
+    suggestedParams = client.suggested_params()
+    
+    appArgs = [
+        b"box_store_transfer", 
+    ]
+    
+    assets = [
+        contributorAssetID,
+    ]
+    
+    contributorClaimTxn = transaction.ApplicationCallTxn(
+        sender=contributorAccount.getAddress(),
+        index=appID,
+        on_complete=transaction.OnComplete.NoOpOC,
+        app_args=appArgs,
+        foreign_assets=assets,
+        sp=suggestedParams,
+        boxes=[[appID, str(contributorAssetID)]],
+    )
+
+    return contributorClaimTxn

@@ -10,7 +10,7 @@ from contracts.naut_prototype.drt_demo import approval,clear
 from contracts.pyteal_helpers.strings import itoa
 from base64 import b64decode, encode
 from helpers.resources import getTemporaryAccount, optInToAsset, createDummyAsset
-from transaction_constructions.operation_txns import createDRT_txn, claimDRT_txn, delistDRT_txn, listDRT_txn, buyDRT_txn
+from transaction_constructions.operation_txns import createDRT_txn, claimDRT_txn, delistDRT_txn, listDRT_txn, buyDRT_txn, appendRedeemDRT_txn, claimContributor_txn
 
 
 from helpers.account import Account
@@ -19,6 +19,7 @@ from helpers.util import (
     fullyCompileContract,
     getAppGlobalState,
     hasOptedIn,
+    getBalances,
 )
 from python_sdk.helpers.util import PendingTxnResponse
 
@@ -269,7 +270,7 @@ def buyDRT_method(
     amountToBuy: int,
     paymentAmount: int
 ):
-    """list DRT.
+    """Buy DRT Method.
 
     This operation configures a group transaction that purchases a DRT
     Transaction 1 ensures the account has opted into the Asset. 
@@ -285,6 +286,11 @@ def buyDRT_method(
         paymentAmount: The payment amount sent to the smart contract to buy the DRT(s)
         
     """
+    #check user has opted in to asset
+    optedIn = hasOptedIn(client=client, account=buyer.getAddress() ,assetID=drtID)
+    if optedIn == None:
+        optInToAsset(client=client,assetID=drtID, account=buyer)
+    
     buyDRTTxn, paymentTxn = buyDRT_txn(
         client=client,
         appID=appID,
@@ -295,15 +301,18 @@ def buyDRT_method(
     )
     
     # # sign transactions
-    signedcreateDRTTxn = buyDRTTxn.sign(buyer.getPrivateKey())
+    signedbuyDRTTxn = buyDRTTxn.sign(buyer.getPrivateKey())
     signedpaymentTxn = paymentTxn.sign(buyer.getPrivateKey())
 
     # # send them over network (note that the accounts need to be funded for this to work)
-    txid = client.send_transactions([signedcreateDRTTxn, signedpaymentTxn])
+    txid = client.send_transactions([signedbuyDRTTxn, signedpaymentTxn])
     
     try:
         response = waitForTransaction(client, txid)
-        print("DRT succesfully bought.")
+        buyerBalances = getBalances(client=client,account=buyer.getAddress())
+        assert buyerBalances[drtID] == amountToBuy
+
+        print("DRT succesfully bought and transferred.")
         
         return response.txn
       
@@ -311,3 +320,169 @@ def buyDRT_method(
         print("Uknown error..")
         print(err)
         return err
+
+def redeemAppendDRT_method(
+    client: AlgodClient,
+    appID: int,
+    redeemer: Account,
+    enclave: Account,
+    appendID: int,
+    assetAmount: int,
+    rowsContributed: int,
+    newHash: str,
+    enclaveApproval: int,
+):
+    """Redeem append DRT.
+
+    This method issues the redeem append DRT transaction to the blockchain. 
+
+    Args:
+        client: An algod client.
+        appID: The app ID of the auction.
+        redeemer: The account of the user redeeming the append DRT
+        enclave: The account of the enclave validating the incoming data
+        appendID: The asset ID of the append DRT
+        assetAmount: The amount of assets of the append DRT being redeemed, always 1
+        rowsContributed: The amount of rows of data contributed to the pool
+        newHash: The new hash of the data pool including the incoming data provided by the enclave
+        enclaveApproval: The payment amount sent to the smart contract to buy the DRT(s)
+        
+    """
+    assetTransferTxn, addContributorTxn = appendRedeemDRT_txn(
+        client=client,
+        appID=appID,
+        redeemer=redeemer,
+        enclave=enclave,
+        appendID=appendID,
+        assetAmount=assetAmount,
+        rowsContributed=rowsContributed,
+        newHash=newHash,
+        enclaveApproval=enclaveApproval
+   
+    )
+    
+    # # sign transactions inside enclave
+    signedassetTransferTxn = assetTransferTxn.sign(redeemer.getPrivateKey())
+    signedaddContributorTxn = addContributorTxn.sign(enclave.getPrivateKey())
+
+    # # send them over network (note that the accounts need to be funded for this to work)
+    txid = client.send_transactions([signedassetTransferTxn , signedaddContributorTxn])
+    
+    try:
+        response = waitForTransaction(client, txid)
+        app_state = getAppGlobalState(client=client, appID=appID)
+        assert redeemer.getAddress() == encode_address(app_state[b'new_contributor_address'])
+        print("Append DRT successfully redeemed and data contributor token created.")
+        
+        return response, app_state[b'new_contributor_asset']
+      
+    except Exception as err:
+        print("Uknown error..")
+        print(err)
+        return err
+
+def claimContributor_method(
+    client: AlgodClient,
+    appID: int,
+    contributorAccount: Account,
+    contributorAssetID: int,
+):
+    """Claim contributor token.
+
+    Args:
+        client: An algod client.
+        contributorAccount: The account that contributor data and needs to claim their token
+        contributorAssetID: The asset ID of the contributor token.
+
+    Returns:
+        success or err.
+    """
+    appAddr = get_application_address(appID)
+    #check user has opted in to asset
+    optedIn = hasOptedIn(client=client, account=contributorAccount.getAddress() ,assetID=contributorAssetID)
+    if optedIn == None:
+        optInToAsset(client=client,assetID=contributorAssetID, account=contributorAccount)
+    
+      
+    claimTxn = claimContributor_txn(
+        client=client,
+        appID=appID,
+        contributorAccount=contributorAccount,
+        contributorAssetID=contributorAssetID
+    )
+
+    signedTxn = claimTxn.sign(contributorAccount.getPrivateKey())
+
+    txid = client.send_transaction(signedTxn)
+
+    try:
+        response = waitForTransaction(client, txid)  
+        print("Contributor claimed asset, ", contributorAssetID)
+        
+        assert response.innerTxns[0]["txn"]["txn"]["snd"] == appAddr
+        assert response.innerTxns[0]["txn"]["txn"]["arcv"] == contributorAccount.getAddress()
+        assert response.innerTxns[0]["txn"]["txn"]["xaid"] == contributorAssetID
+        return response
+      
+    except Exception as err:
+        print("Uknown error..")
+        print(err)
+        return err
+
+def joinDataPool_method(
+    client: AlgodClient,
+    appID: int,
+    redeemer: Account,
+    enclave: Account,
+    appendID: int,
+    assetAmount: int,
+    rowsContributed: int,
+    newHash: str,
+    enclaveApproval: int,   
+):
+    """Join Data Pool Method.
+
+    This operation combines the redeem Append DRT and claim contributor DRT method functions. 
+    Args:
+        client: An algod client.
+        appID: The app ID of the auction.
+        redeemer: The account of the user redeeming the append DRT
+        enclave: The account of the enclave validating the incoming data
+        appendID: The asset ID of the append DRT
+        assetAmount: The amount of assets of the append DRT being redeemed, always 1
+        rowsContributed: The amount of rows of data contributed to the pool
+        newHash: The new hash of the data pool including the incoming data provided by the enclave
+        enclaveApproval: The payment amount sent to the smart contract to buy the DRT(s)
+
+    """
+    
+    appAddr = get_application_address(appID)
+    
+    try:
+        response, contributorAssetID = redeemAppendDRT_method(
+            client=client,
+            appID=appID,
+            redeemer=redeemer,
+            enclave=enclave,
+            appendID=appendID,
+            assetAmount=assetAmount,
+            rowsContributed=rowsContributed,
+            newHash=newHash,
+            enclaveApproval=enclaveApproval
+            )
+    except Exception as err:
+        print(err)
+        return err
+    
+    try:
+        claimContributor_method(
+            client=client,
+            contributorAccount=redeemer,
+            appID=appID,
+            contributorAssetID=contributorAssetID
+        )
+    except Exception as err:
+        print(err)
+        return err    
+
+    return contributorAssetID
