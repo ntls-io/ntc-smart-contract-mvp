@@ -1,11 +1,11 @@
 from time import time, sleep
 from algosdk.encoding import decode_address, encode_address,base64
 import pytest
-from methods.sc_methods import createAndClaimDRT_method, delistDRT_method, listDRT_method, buyDRT_method
+from methods.sc_methods import createAndClaimDRT_method, delistDRT_method, listDRT_method, buyDRT_method, redeemAppendDRT_method, claimContributor_method, joinDataPool_method
 from algosdk import account, encoding
 from algosdk.logic import get_application_address
 
-from methods.sc_create_method import completeDataPoolSetup
+from methods.sc_create_method import completeDataPoolSetup, init_claimContributor
 from helpers.util import getBalances, getAppGlobalState, getLastBlockTimestamp, hasOptedIn
 from helpers.setup import getAlgodClient
 from helpers.resources import getTemporaryAccount, optInToAsset, createDummyAsset
@@ -29,7 +29,7 @@ appID, appAccount, appendDRT, contributorDRT_1 = completeDataPoolSetup(
     client=client, 
     creator=creator, 
     enclave=enclave, 
-    fundingAmount=1000000, 
+    fundingAmount=2000000, 
     noRowsContributed=5,
     dataPackageHash=b"DGVWUSNA--init--ASUDBQ",
     appendDRTName=b"Append_DRT",
@@ -86,6 +86,37 @@ delist_drt = listDRT_method(
 )
 print("")
 print(".....Buy DRT.....","\n")
+buy_test = buyDRT_method(
+    client=client, 
+    appID=appID, 
+    buyer=buyer, 
+    drtID=id_DRT, 
+    amountToBuy=1, 
+    paymentAmount=1000000
+    )
 
-buy_test = buyDRT_method(client=client, appID=appID, buyer=buyer, drtID=id_DRT, amountToBuy=1, paymentAmount=1000000)
-
+print("")
+print(".....Join Data Pool.....","\n")
+print("1. Purchase Append DRT.....")
+buy_append = buyDRT_method(
+    client=client, 
+    appID=appID, 
+    buyer=contributor, 
+    drtID=appendDRT, 
+    amountToBuy=1, 
+    paymentAmount=1000000
+)
+print("2. Redeem Append DRT.....")
+contributorAssetID = joinDataPool_method(
+    client=client,
+    appID=appID,
+    redeemer=contributor,
+    enclave=enclave,
+    appendID=appendDRT,
+    assetAmount=1,
+    rowsContributed=3,
+    newHash=b"DGVWUSNA--new--ASUDBQ",
+    enclaveApproval=1
+)
+print("")
+print(".....Join Data Pool Successfull.....","\n")

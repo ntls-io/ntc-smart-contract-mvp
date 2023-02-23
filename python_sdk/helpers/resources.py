@@ -122,3 +122,20 @@ def createDummyAsset(client: AlgodClient, total: int, account: Account = None) -
     response = waitForTransaction(client, signedTxn.get_txid())
     assert response.assetIndex is not None and response.assetIndex > 0
     return response.assetIndex
+
+
+def transferAsset(
+    client: AlgodClient, sender: Account, to: str, assetID: int, amount: int
+) -> PendingTxnResponse:
+    txn = transaction.AssetTransferTxn(
+        sender=sender.getAddress(),
+        receiver=to,
+        index=assetID,
+        amt=amount,
+        sp=client.suggested_params(),
+    )
+    signedTxn = txn.sign(sender.getPrivateKey())
+
+    client.send_transaction(signedTxn)
+    return waitForTransaction(client, signedTxn.get_txid())
+
