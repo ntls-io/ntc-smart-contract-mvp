@@ -1,7 +1,7 @@
 from time import time, sleep
 from algosdk.encoding import decode_address, encode_address,base64
 import pytest
-from methods.sc_methods import createAndClaimDRT_method, delistDRT_method, listDRT_method, buyDRT_method, redeemAppendDRT_method, claimContributor_method, joinDataPool_method
+from methods.sc_methods import createAndClaimDRT_method, delistDRT_method, listDRT_method, buyDRT_method, redeemAppendDRT_method, claimContributor_method, joinDataPool_method, executeDRT_method
 from algosdk import account, encoding
 from algosdk.logic import get_application_address
 
@@ -120,3 +120,14 @@ contributorAssetID = joinDataPool_method(
 )
 print("")
 print(".....Join Data Pool Successfull.....","\n")
+print(".....Execute DRT.....","\n")
+execute_drt = executeDRT_method(
+    client=client,
+    owner=buyer,
+    appID=appID,
+    assetID=id_DRT,
+    assetAmount=1,
+    paymentAmount=1000000   
+)
+print("")
+print(".....Execute DRT Successfull.....","\n")

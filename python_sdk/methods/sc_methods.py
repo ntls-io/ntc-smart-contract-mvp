@@ -10,7 +10,7 @@ from contracts.naut_prototype.drt_demo import approval,clear
 from contracts.pyteal_helpers.strings import itoa
 from base64 import b64decode, encode
 from helpers.resources import getTemporaryAccount, optInToAsset, createDummyAsset
-from transaction_constructions.operation_txns import createDRT_txn, claimDRT_txn, delistDRT_txn, listDRT_txn, buyDRT_txn, appendRedeemDRT_txn, claimContributor_txn
+from transaction_constructions.operation_txns import createDRT_txn, claimDRT_txn, delistDRT_txn, listDRT_txn, buyDRT_txn, appendRedeemDRT_txn, claimContributor_txn, executeDRT_txn
 
 
 from helpers.account import Account
@@ -262,64 +262,6 @@ def listDRT_method(
         print(err)
         return err
 
-def buyDRT_method(
-    client: AlgodClient,
-    appID: int,
-    buyer: Account,
-    drtID: int,
-    amountToBuy: int,
-    paymentAmount: int
-):
-    """Buy DRT Method.
-
-    This operation configures a group transaction that purchases a DRT
-    Transaction 1 ensures the account has opted into the Asset. 
-    Transaction 2 issues the "buy_drt" application call
-    Transaction 3 sends the payment amount to the application
-
-    Args:
-        client: An algod client.
-        appID: The app ID of the auction.
-        buyer: The account of the sender of the create DRT transaction (creator account).
-        drtID: The asset ID of the newly created DRT
-        amountToBuy: The amount of tokens the buyer wishes to buy of the single DRT
-        paymentAmount: The payment amount sent to the smart contract to buy the DRT(s)
-        
-    """
-    #check user has opted in to asset
-    optedIn = hasOptedIn(client=client, account=buyer.getAddress() ,assetID=drtID)
-    if optedIn == None:
-        optInToAsset(client=client,assetID=drtID, account=buyer)
-    
-    buyDRTTxn, paymentTxn = buyDRT_txn(
-        client=client,
-        appID=appID,
-        buyer=buyer,
-        drtID=drtID,
-        amountToBuy=amountToBuy,
-        paymentAmount=paymentAmount,
-    )
-    
-    # # sign transactions
-    signedbuyDRTTxn = buyDRTTxn.sign(buyer.getPrivateKey())
-    signedpaymentTxn = paymentTxn.sign(buyer.getPrivateKey())
-
-    # # send them over network (note that the accounts need to be funded for this to work)
-    txid = client.send_transactions([signedbuyDRTTxn, signedpaymentTxn])
-    
-    try:
-        response = waitForTransaction(client, txid)
-        buyerBalances = getBalances(client=client,account=buyer.getAddress())
-        assert buyerBalances[drtID] == amountToBuy
-
-        print("DRT succesfully bought and transferred.")
-        
-        return response.txn
-      
-    except Exception as err:
-        print("Uknown error..")
-        print(err)
-        return err
 
 def redeemAppendDRT_method(
     client: AlgodClient,
@@ -486,3 +428,125 @@ def joinDataPool_method(
         return err    
 
     return contributorAssetID
+
+def buyDRT_method(
+    client: AlgodClient,
+    appID: int,
+    buyer: Account,
+    drtID: int,
+    amountToBuy: int,
+    paymentAmount: int
+):
+    """Execute DRT Method.
+
+    This operation configures a group transaction that purchases a DRT
+    Transaction 1 ensures the account has opted into the Asset. 
+    Transaction 2 issues the "buy_drt" application call
+    Transaction 3 sends the payment amount to the application
+
+    Args:
+        client: An algod client.
+        appID: The app ID of the auction.
+        buyer: The account of the sender of the create DRT transaction (creator account).
+        drtID: The asset ID of the newly created DRT
+        amountToBuy: The amount of tokens the buyer wishes to buy of the single DRT
+        paymentAmount: The payment amount sent to the smart contract to buy the DRT(s)
+        
+    """
+    #check user has opted in to asset
+    optedIn = hasOptedIn(client=client, account=buyer.getAddress() ,assetID=drtID)
+    if optedIn == None:
+        optInToAsset(client=client,assetID=drtID, account=buyer)
+    
+    buyDRTTxn, paymentTxn = buyDRT_txn(
+        client=client,
+        appID=appID,
+        buyer=buyer,
+        drtID=drtID,
+        amountToBuy=amountToBuy,
+        paymentAmount=paymentAmount,
+    )
+    
+    # # sign transactions
+    signedbuyDRTTxn = buyDRTTxn.sign(buyer.getPrivateKey())
+    signedpaymentTxn = paymentTxn.sign(buyer.getPrivateKey())
+
+    # # send them over network (note that the accounts need to be funded for this to work)
+    txid = client.send_transactions([signedbuyDRTTxn, signedpaymentTxn])
+    
+    try:
+        response = waitForTransaction(client, txid)
+        buyerBalances = getBalances(client=client,account=buyer.getAddress())
+        assert buyerBalances[drtID] == amountToBuy
+
+        print("DRT succesfully bought and transferred.")
+        
+        return response.txn
+      
+    except Exception as err:
+        print("Uknown error..")
+        print(err)
+        return err
+    
+
+def executeDRT_method(
+    client: AlgodClient,
+    owner: Account,
+    appID: int,
+    assetID: int,
+    assetAmount: int,
+    paymentAmount: int,
+):
+    """Buy DRT Method.
+
+    This operation makes use of the executeDRT_txn builder to build and sign the group transaction
+    to execute a DRT
+
+    Args:
+        client: An algod client.
+        owner: the account of the owner of the DRT
+        appID: The app ID of the smart contract Data Pool
+        assetID: asset ID of DRT to execute
+        assetAmount: total supply of asset to execute ( Always 1 )
+        paymentAmount: fixed fee amount to the smart contract to execute the DRT
+        
+    """
+    
+    executerBalances_start = getBalances(client=client,account=owner.getAddress())
+    appAddr = get_application_address(appID)
+    appBalances_start = getBalances(client=client,account=appAddr)
+    
+    assetTransferTxn, paymentTxn, executeDRTTxn = executeDRT_txn(
+        client=client,
+        owner=owner,
+        appID=appID,
+        assetID=assetID,
+        assetAmount=assetAmount,
+        paymentAmount=paymentAmount,
+    )
+    
+    # # sign transactions
+    signedassetTransferTxn = assetTransferTxn.sign(owner.getPrivateKey())
+    signedpaymentTxn = paymentTxn.sign(owner.getPrivateKey())
+    signedexecuteDRTTxn = executeDRTTxn.sign(owner.getPrivateKey())
+
+    # # send them over network (note that the accounts need to be funded for this to work)
+    txid = client.send_transactions([signedassetTransferTxn, signedpaymentTxn, signedexecuteDRTTxn])
+    
+    try:
+        response = waitForTransaction(client, txid)
+        
+        executerBalances_end = getBalances(client=client,account=owner.getAddress())
+        appBalances_end = getBalances(client=client,account=appAddr)
+
+        assert executerBalances_end[assetID] < executerBalances_start[assetID]
+        assert appBalances_end[assetID] > appBalances_start[assetID]
+
+        print("DRT executed, asset ID:", assetID)
+        
+        return response.txn
+      
+    except Exception as err:
+        print("Uknown error..")
+        print(err)
+        return err

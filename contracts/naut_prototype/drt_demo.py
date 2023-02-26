@@ -10,6 +10,7 @@ DEFAULT_HASH = Bytes("base64", "y9OJ5MRLCHQj8GqbikAUKMBI7hom+SOj8dlopNdNHXI=")
 DEFAULT_NOTE= Bytes("")
 DEFAULT_URL= Bytes("")
 NAUTILUS_EXCHANGE_ID = Int(10001)
+EXECUTE_DRT_FEE = Int(1000000)
 
 def approval():
     # Stored global variables
@@ -38,6 +39,7 @@ def approval():
     op_con_ownership_change = Bytes("contributor_owner_change")         # Method Call
     op_de_list_drt = Bytes("de_list_drt")                               # Method Call
     op_list_drt = Bytes("list_drt")                                     # Method Call
+    op_execute_drt = Bytes("execute_drt")                               # Method Call
     
     @Subroutine(TealType.none)
     def defaultTransactionChecks(txnId: Expr):
@@ -570,7 +572,6 @@ def approval():
 
                     #check the sender is equal to the account who sent the append drt and wants to be a contributor
                     Txn.sender() == new_contributor_account,
-                    #sender_test.load() == Int(1),
                     # #check sender has opted in to contributor token
                     contributorOptIn.hasValue(),
                     # #ensure contributor vareiables are not zero
@@ -662,7 +663,7 @@ def approval():
             Approve(),
         ) 
    
-# Function to claim royalty fee from the ownership of a contributor token
+# Function to change the registered ownership of the DRT stored in the box storage
     @Subroutine(TealType.none)
     def drt_ownership_change():
         #transaction 1 transfer asset values
@@ -804,7 +805,7 @@ def approval():
             
             App.globalPut(Bytes("contributor_ID"),  Gtxn[0].xfer_asset()),
         
-            #update existing contrinutor owner with new owner
+            #update existing contributor owner with new owner
             App.box_replace(contributor_box_name, Int(16), newContributor),    
             
             App.globalPut(Bytes("new_contributor"), App.box_extract(contributor_box_name, Int(16), Int(32))),    
@@ -814,6 +815,88 @@ def approval():
     
             Approve(),
         )  
+
+# Function to redeem the Append DRT 
+    @Subroutine(TealType.none)
+    def execute_drt():
+        #transaction 1 transfer asset values
+        assetTraded = Gtxn[0].xfer_asset() #asset id
+        assetReceiver = Gtxn[0].asset_receiver() #account_encalve
+        assetSender = Gtxn[0].sender() #account_2
+        asset_creator = AssetParam.creator(Gtxn[0].xfer_asset()) #account_app
+        assetAmount = Gtxn[0].asset_amount() #asset amount
+        
+        #transaction 2 payment values
+        paymentAmount = Gtxn[1].amount() #traded amount
+        paymentReceiver = Gtxn[1].receiver() # account_2
+        paymentSender = Gtxn[1].sender() #account_enclave
+        
+        
+        #transaction 3 - execute DRT
+        registered_owner_box_name = Concat(Itob(assetTraded), Gtxn[0].sender()) #assetid + account_2
+        # if App.box_get function runs, therefore the owner is registered
+        registered_owner_supply = ScratchVar()
+        new_registered_supply = ScratchVar()
+    
+        # get app ownership variables 
+        app_box_name = Concat(Itob(assetTraded), Global.current_application_address())
+        app_supply = ScratchVar()
+        new_app_supply = ScratchVar()
+        
+        new_fees = ScratchVar()
+        current_fees = App.globalGet(global_total_fees)
+        
+        init = App.globalGet(global_init)
+        
+        return Seq(
+             #basic sanity checks
+            defaultTransactionChecks(Int(0)),  # Perform default transaction checks
+            defaultTransactionChecks(Int(1)), # Perform default transaction checks
+            program.check_rekey_zero(1),
+            
+            registered_owner_variables := App.box_get(registered_owner_box_name),
+            registered_owner_supply.store(ExtractUint64(registered_owner_variables.value(),Int(0))),
+            
+            app_variables := App.box_get(app_box_name),
+            app_supply.store(ExtractUint64(app_variables.value(),Int(8))),
+            asset_creator,    
+                
+            Assert(
+                And(
+                    #check group size
+                    Global.group_size() == Int(3),
+                    # ensure receiver of payment and asset, creator of asset is the app
+                    assetReceiver == Global.current_application_address(),
+                    paymentReceiver == Global.current_application_address(),
+                    assetSender == paymentSender,
+                    asset_creator.value() == Global.current_application_address(),
+                    assetAmount == Int(1),
+                    
+                    registered_owner_supply.load() >= Int(1),
+                    app_supply.load() >= Int(1),
+                    
+                    paymentAmount == EXECUTE_DRT_FEE,
+                    
+                    init != Int(0),
+                )
+            ),
+            # decrease current owners account by 1
+            new_registered_supply.store(registered_owner_supply.load() - assetAmount),
+            App.box_replace(registered_owner_box_name, Int(0) , Itob(new_registered_supply.load())),
+            
+            #increase supply back to current applications box
+            new_app_supply.store(app_supply.load() + assetAmount),
+            App.box_replace(app_box_name, Int(8) , Itob(new_app_supply.load())),
+
+            
+            # add fee paypout to global total fees
+            new_fees.store(current_fees + paymentAmount),
+            App.globalPut(global_total_fees,new_fees.load() ),
+            
+            Approve(),
+            
+        )
+   
        
 # Check the transaction type and execute the corresponding code
 # 1. If smart contract does not exist it will trigger the initialisation sequence contained in the "init" variable.
@@ -898,6 +981,10 @@ def approval():
                 [
                     Txn.application_args[0] == op_list_drt,
                     list_drt()
+                ],
+                [
+                    Txn.application_args[0] == op_execute_drt,
+                    execute_drt()
                 ],
             ),
             Reject(),
