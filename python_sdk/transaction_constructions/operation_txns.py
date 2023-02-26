@@ -288,7 +288,7 @@ def appendRedeemDRT_txn(
 
     Args:
         client: An algod client.
-        appID: The app ID of the auction.
+        appID: The app ID of the smart contract Data Pool
         redeemer: The account of the user redeeming the append DRT
         enclave: The account of the enclave validating the incoming data
         appendID: The asset ID of the append DRT
@@ -336,7 +336,6 @@ def appendRedeemDRT_txn(
     return [assetTransferTxn, addContributorTxn]
 
 
-
 def claimContributor_txn(
     client: AlgodClient,
     appID: int,
@@ -347,9 +346,9 @@ def claimContributor_txn(
 
     Args:
         client: An algod client.
+        appID: The app ID of the smart contract Data Pool
         contributorAccount: The account that contributor data and needs to claim their token
         contributorAssetID: The asset ID of the contributor token.
-
 
     Returns:
         success or err.
@@ -375,3 +374,81 @@ def claimContributor_txn(
     )
 
     return contributorClaimTxn
+
+
+
+def executeDRT_txn(
+    client: AlgodClient,
+    owner: Account,
+    appID: int,
+    assetID: int,
+    assetAmount: int,
+    paymentAmount: int,
+):
+    """Execute DRT.
+
+    This function constructs the group transaction that is used when a user wants to execute a DRT they own.
+    Transaction 1 transfers the DRT back to the smart contract
+    Transaction 2 pays for the execution of the DRT
+    Transaction 3 issues the "execute_drt" instruction to the smart contract sent from the current Owners account
+
+    Args:
+        client: An algod client.
+        owner: the account of the owner of the DRT
+        appID: The app ID of the smart contract Data Pool
+        assetID: asset ID of DRT to execute
+        assetAmount: total supply of asset to execute ( Always 1 )
+        paymentAmount: fixed fee amount to the smart contract to execute the DRT
+        
+    """
+    suggestedParams = client.suggested_params()
+    appAddr = get_application_address(appID)
+    
+    #asset transfer Txn
+    assetTransferTxn = transaction.AssetTransferTxn(
+        sender=owner.getAddress(),
+        receiver=appAddr,
+        index=assetID,
+        amt=assetAmount,
+        sp=client.suggested_params(),
+    )
+    
+    #payment transaction
+    paymentTxn = transaction.PaymentTxn(
+        sender=owner.getAddress(),
+        receiver=appAddr,
+        amt=paymentAmount,
+        sp=client.suggested_params(),
+    )
+    
+    #variables for "execute drt" transaction
+    appArgs = [
+        b"execute_drt",
+    ]
+    
+    asset_bytes = assetID.to_bytes(8, 'big')
+    pk_appAddr = decode_address(appAddr)
+    pk_executer = decode_address(owner.getAddress())
+
+    box_name_owner = asset_bytes + pk_executer
+    box_name_app = asset_bytes + pk_appAddr
+    
+    executeDRTTxn =  transaction.ApplicationCallTxn(
+        sender=owner.getAddress(),
+        index=appID,
+        on_complete=transaction.OnComplete.NoOpOC,
+        app_args=appArgs,
+        sp=suggestedParams,
+        foreign_assets=[assetID],
+        boxes=[[appID, box_name_app], [appID, box_name_owner]]
+    )
+    
+    # get group id and assign it to transactions
+    gid = transaction.calculate_group_id([assetTransferTxn, paymentTxn, executeDRTTxn])
+
+    assetTransferTxn.group = gid
+    paymentTxn.group = gid
+    executeDRTTxn.group = gid
+
+
+    return [assetTransferTxn, paymentTxn, executeDRTTxn]
