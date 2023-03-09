@@ -832,7 +832,7 @@ def approval():
         paymentSender = Gtxn[1].sender() #account_enclave
         
         
-        #transaction 3 - execute DRT
+        #transaction 3 - this transaction
         registered_owner_box_name = Concat(Itob(assetTraded), Gtxn[0].sender()) #assetid + account_2
         # if App.box_get function runs, therefore the owner is registered
         registered_owner_supply = ScratchVar()
