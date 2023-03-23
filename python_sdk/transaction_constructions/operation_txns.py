@@ -336,7 +336,7 @@ def appendRedeemDRT_txn(
     return [assetTransferTxn, addContributorTxn]
 
 
-def claimContributor_txn(
+def oldclaimContributor_txn(
     client: AlgodClient,
     appID: int,
     contributorAccount: Account,
@@ -452,3 +452,167 @@ def executeDRT_txn(
 
 
     return [assetTransferTxn, paymentTxn, executeDRTTxn]
+
+
+def pendingContributor_txn(
+    client: AlgodClient,
+    appID: int,
+    redeemer: Account,
+    appendID: int,
+    assetAmount: int,  
+    paymentAmount: int,
+):
+    """Redeem the append DRT function.
+
+    This function constructs the group transaction that is used when a append DRT is redeemed. i.e when a user wants to contribute data to the pool
+    Transaction 1 transfers the append DRT back to the smart contract
+    Transaction 2 sends payment to the smart contract for the execution fee
+    Transaction 3 sends instruction to the smart contract to add user as a contributor pending approval from enclave
+
+    Args:
+        client: An algod client.
+        appID: The app ID of the smart contract Data Pool
+        redeemer: The account of the user redeeming the append DRT
+        appendID: The asset ID of the append DRT
+        assetAmount: The amount of assets of the append DRT being redeemed, always 1
+    """
+    suggestedParams = client.suggested_params()
+    appAddr = get_application_address(appID)
+    
+    #txn 1
+    assetTransferTxn = transaction.AssetTransferTxn(
+        sender=redeemer.getAddress(),
+        receiver=appAddr,
+        index=appendID,
+        amt=assetAmount,
+        sp=client.suggested_params(),
+    )
+    
+    #txn 2
+    paymentTxn = transaction.PaymentTxn(
+        sender=redeemer.getAddress(),
+        receiver=appAddr,
+        amt=paymentAmount,
+        sp=client.suggested_params(),
+    )
+    
+    #txn 3
+    appArgs = [
+        b"add_contributor_pending",
+    ]
+    
+    box_name = decode_address(redeemer.getAddress())
+    
+    addPendingContributorTxn =  transaction.ApplicationCallTxn(
+        sender=redeemer.getAddress(),
+        index=appID,
+        on_complete=transaction.OnComplete.NoOpOC,
+        app_args=appArgs,
+        sp=suggestedParams,
+        boxes=[[appID, box_name]]
+    )
+    
+    # get group id and assign it to transactions
+    gid = transaction.calculate_group_id([assetTransferTxn, paymentTxn,addPendingContributorTxn])
+
+    assetTransferTxn.group = gid
+    paymentTxn.group = gid
+    addPendingContributorTxn.group = gid
+
+
+    return [assetTransferTxn, paymentTxn, addPendingContributorTxn]
+
+
+def confirmContributor_txn(
+    client: AlgodClient,
+    appID: int,
+    contributor: Account,
+    enclave: Account,
+    rowsContributed: int,
+    newHash: str,
+    enclaveApproval: int,
+    
+):
+    """Confirm the contributors data contribution from enclave.
+
+    This function confirms the data contribution from within the enclave
+    
+    Args:
+        client: An algod client.
+        appID: The app ID of the smart contract Data Pool
+        contributor: The account of the user redeeming the append DRT
+        enclave: The account of the enclave validating the incoming data
+        appendID: The asset ID of the append DRT
+        assetAmount: The amount of assets of the append DRT being redeemed, always 1
+        rowsContributed: The amount of rows of data contributed to the pool
+        newHash: The new hash of the data pool including the incoming data provided by the enclave
+        enclaveApproval: The payment amount sent to the smart contract to buy the DRT(s)
+        
+    """
+    suggestedParams = client.suggested_params()
+    appAddr = get_application_address(appID)
+    
+    
+    appArgs = [
+        b"add_contributor_approved",
+        rowsContributed,
+        newHash,
+        enclaveApproval,
+    ]
+    
+    box_name = decode_address(contributor.getAddress())
+    
+    addConfirmContributorTxn =  transaction.ApplicationCallTxn(
+        sender=enclave.getAddress(),
+        index=appID,
+        on_complete=transaction.OnComplete.NoOpOC,
+        app_args=appArgs,
+        sp=suggestedParams,
+        accounts=[contributor.getAddress()],
+        boxes=[[appID, box_name]]
+    )
+    
+
+
+    return addConfirmContributorTxn
+
+
+def claimContributor_txn(
+    client: AlgodClient,
+    appID: int,
+    contributorAccount: Account,
+    contributorAssetID: int,
+):
+    """Claim contributor token.
+
+    Args:
+        client: An algod client.
+        appID: The app ID of the smart contract Data Pool
+        contributorAccount: The account that contributor data and needs to claim their token
+        contributorAssetID: The asset ID of the contributor token.
+
+    Returns:
+        success or err.
+    """  
+    suggestedParams = client.suggested_params()
+    
+    appArgs = [
+        b"add_contributor_claim", 
+    ]
+    
+    assets = [
+        contributorAssetID,
+    ]
+    
+    contributorClaimTxn = transaction.ApplicationCallTxn(
+        sender=contributorAccount.getAddress(),
+        index=appID,
+        on_complete=transaction.OnComplete.NoOpOC,
+        app_args=appArgs,
+        foreign_assets=assets,
+        sp=suggestedParams,
+        boxes=[[appID, str(contributorAssetID)], [appID, decode_address(contributorAccount.getAddress())]],
+    )
+
+    return contributorClaimTxn
+

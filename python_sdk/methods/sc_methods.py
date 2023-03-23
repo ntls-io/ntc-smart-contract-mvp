@@ -10,7 +10,7 @@ from contracts.naut_prototype.drt_demo import approval,clear
 from contracts.pyteal_helpers.strings import itoa
 from base64 import b64decode, encode
 from helpers.resources import getTemporaryAccount, optInToAsset, createDummyAsset
-from transaction_constructions.operation_txns import createDRT_txn, claimDRT_txn, delistDRT_txn, listDRT_txn, buyDRT_txn, appendRedeemDRT_txn, claimContributor_txn, executeDRT_txn
+from transaction_constructions.operation_txns import createDRT_txn, claimDRT_txn, delistDRT_txn, listDRT_txn, buyDRT_txn, appendRedeemDRT_txn, oldclaimContributor_txn, executeDRT_txn, pendingContributor_txn, confirmContributor_txn, claimContributor_txn
 
 
 from helpers.account import Account
@@ -323,7 +323,7 @@ def redeemAppendDRT_method(
         print(err)
         return err
 
-def claimContributor_method(
+def oldclaimContributor_method(
     client: AlgodClient,
     appID: int,
     contributorAccount: Account,
@@ -346,7 +346,7 @@ def claimContributor_method(
         optInToAsset(client=client,assetID=contributorAssetID, account=contributorAccount)
     
       
-    claimTxn = claimContributor_txn(
+    claimTxn = oldclaimContributor_txn(
         client=client,
         appID=appID,
         contributorAccount=contributorAccount,
@@ -417,7 +417,7 @@ def joinDataPool_method(
         return err
     
     try:
-        claimContributor_method(
+        oldclaimContributor_method(
             client=client,
             contributorAccount=redeemer,
             appID=appID,
@@ -545,6 +545,172 @@ def executeDRT_method(
         print("DRT executed, asset ID:", assetID)
         
         return response.txn
+      
+    except Exception as err:
+        print("Uknown error..")
+        print(err)
+        return err
+
+
+
+def addPendingContributor_method(
+    client: AlgodClient,
+    appID: int,
+    redeemer: Account,
+    appendID: int,
+    assetAmount: int,
+    paymentAmount: int,
+):
+    """Add pending contributor.
+
+
+    Args:
+        client: An algod client.
+        redemr: the account of the owner of the DRT
+        appID: The app ID of the smart contract Data Pool
+        appendID: asset ID of apppend DRT
+        assetAmount: total supply of asset to execute ( Always 1 )
+        paymentAmount: fixed fee amount to the smart contract to execute the DRT
+        
+    """
+    
+    
+    assetTransferTxn, paymentTxn, executeDRTTxn = pendingContributor_txn(
+        client=client,
+        redeemer=redeemer,
+        appID=appID,
+        appendID=appendID,
+        assetAmount=assetAmount,
+        paymentAmount=paymentAmount,
+    )
+    
+    # # sign transactions
+    signedassetTransferTxn = assetTransferTxn.sign(redeemer.getPrivateKey())
+    signedpaymentTxn = paymentTxn.sign(redeemer.getPrivateKey())
+    signedexecuteDRTTxn = executeDRTTxn.sign(redeemer.getPrivateKey())
+
+    # # send them over network (note that the accounts need to be funded for this to work)
+    txid = client.send_transactions([signedassetTransferTxn, signedpaymentTxn, signedexecuteDRTTxn])
+    
+    try:
+        response = waitForTransaction(client, txid)
+        
+        # executerBalances_end = getBalances(client=client,account=owner.getAddress())
+        # appBalances_end = getBalances(client=client,account=appAddr)
+
+        # assert executerBalances_end[assetID] < executerBalances_start[assetID]
+        # assert appBalances_end[assetID] > appBalances_start[assetID]
+
+        # print("DRT executed, asset ID:", assetID)
+        print("successfully pending contributor")
+        return response.txn
+      
+    except Exception as err:
+        print("Uknown error..")
+        print(err)
+        return err
+
+
+
+def pendingContributorConfirm_method(
+    client: AlgodClient,
+    appID: int,
+    contributor: Account,
+    enclave: Account,
+    rowsContributed: int,
+    newHash: str,
+    enclaveApproval: int
+):
+    """Confirm Pending Contributor.
+
+    Args:
+        client: An algod client.
+        redemr: the account of the owner of the DRT
+        appID: The app ID of the smart contract Data Pool
+        appendID: asset ID of apppend DRT
+        assetAmount: total supply of asset to execute ( Always 1 )
+        paymentAmount: fixed fee amount to the smart contract to execute the DRT
+        
+    """
+    
+    
+    confirmPendingContributorTxn = confirmContributor_txn(
+        client=client,
+        contributor=contributor,
+        enclave=enclave,
+        appID=appID,
+        rowsContributed=rowsContributed,
+        newHash=newHash,
+        enclaveApproval=enclaveApproval
+    )
+    
+    # sign transaction
+    signedconfirmPendingContributorTxn = confirmPendingContributorTxn.sign(enclave.getPrivateKey())
+
+    # # send them over network (note that the accounts need to be funded for this to work)
+    txid = client.send_transaction(signedconfirmPendingContributorTxn)
+    
+    try:
+        response = waitForTransaction(client, txid)
+        
+        # executerBalances_end = getBalances(client=client,account=owner.getAddress())
+        # appBalances_end = getBalances(client=client,account=appAddr)
+
+        # assert executerBalances_end[assetID] < executerBalances_start[assetID]
+        # assert appBalances_end[assetID] > appBalances_start[assetID]
+
+        print("Contributor approval success")
+        
+        return response.txn
+      
+    except Exception as err:
+        print("Uknown error..")
+        print(err)
+        return err
+
+
+def claimContributor_method(
+    client: AlgodClient,
+    appID: int,
+    contributorAccount: Account,
+    contributorAssetID: int,
+):
+    """Claim contributor token.
+
+    Args:
+        client: An algod client.
+        contributorAccount: The account that contributor data and needs to claim their token
+        contributorAssetID: The asset ID of the contributor token.
+
+    Returns:
+        success or err.
+    """
+    appAddr = get_application_address(appID)
+    #check user has opted in to asset
+    optedIn = hasOptedIn(client=client, account=contributorAccount.getAddress() ,assetID=contributorAssetID)
+    if optedIn == None:
+        optInToAsset(client=client,assetID=contributorAssetID, account=contributorAccount)
+    
+      
+    claimTxn = claimContributor_txn(
+        client=client,
+        appID=appID,
+        contributorAccount=contributorAccount,
+        contributorAssetID=contributorAssetID
+    )
+
+    signedTxn = claimTxn.sign(contributorAccount.getPrivateKey())
+
+    txid = client.send_transaction(signedTxn)
+
+    try:
+        response = waitForTransaction(client, txid)  
+        print("Contributor claimed asset, ", contributorAssetID)
+        
+        # assert response.innerTxns[0]["txn"]["txn"]["snd"] == appAddr
+        # assert response.innerTxns[0]["txn"]["txn"]["arcv"] == contributorAccount.getAddress()
+        # assert response.innerTxns[0]["txn"]["txn"]["xaid"] == contributorAssetID
+        return response
       
     except Exception as err:
         print("Uknown error..")

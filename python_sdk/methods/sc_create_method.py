@@ -161,6 +161,7 @@ def initialiseDataPool(
         funder.getAddress(),
     ]
     
+    box_name = decode_address(funder.getAddress())
     
     setupTxn = transaction.ApplicationCallTxn(
         sender=enclave.getAddress(),
@@ -169,6 +170,7 @@ def initialiseDataPool(
         app_args=appArgs,
         accounts=accounts,
         sp=suggestedParams,
+        boxes=[[appID, box_name]]
     )
 
     signedSetupTxn = setupTxn.sign(enclave.getPrivateKey())
@@ -208,7 +210,7 @@ def init_claimContributor(
     suggestedParams = client.suggested_params()
     
     appArgs = [
-        b"box_store_transfer", 
+        b"add_contributor_claim", 
     ]
     
     assets = [
@@ -229,7 +231,7 @@ def init_claimContributor(
         app_args=appArgs,
         foreign_assets=assets,
         sp=suggestedParams,
-        boxes=[[appID, str(contributorAssetID)],[appID, box_name]],
+        boxes=[[appID, str(contributorAssetID)],[appID, box_name], [appID, decode_address(contributorAccount.getAddress())]],
     )
 
     signedTxn = claimTxn.sign(contributorAccount.getPrivateKey())

@@ -1,9 +1,13 @@
 from time import time, sleep
+from pyteal import *
+import struct
+import bitstring
 from algosdk.encoding import decode_address, encode_address,base64
 import pytest
-from methods.sc_methods import createAndClaimDRT_method, delistDRT_method, listDRT_method, buyDRT_method, redeemAppendDRT_method, claimContributor_method, joinDataPool_method, executeDRT_method
+from methods.sc_methods import createAndClaimDRT_method, delistDRT_method, listDRT_method, buyDRT_method, redeemAppendDRT_method, claimContributor_method, joinDataPool_method, executeDRT_method, addPendingContributor_method, pendingContributorConfirm_method
 from algosdk import account, encoding
 from algosdk.logic import get_application_address
+from algosdk import *
 
 from methods.sc_create_method import completeDataPoolSetup, init_claimContributor
 from helpers.util import getBalances, getAppGlobalState, getLastBlockTimestamp, hasOptedIn
@@ -96,30 +100,30 @@ buy_test = buyDRT_method(
     )
 
 print("")
-print(".....Join Data Pool.....","\n")
-print("1. Purchase Append DRT.....")
-buy_append = buyDRT_method(
-    client=client, 
-    appID=appID, 
-    buyer=contributor, 
-    drtID=appendDRT, 
-    amountToBuy=1, 
-    paymentAmount=1000000
-)
-print("2. Redeem Append DRT.....")
-contributorAssetID = joinDataPool_method(
-    client=client,
-    appID=appID,
-    redeemer=contributor,
-    enclave=enclave,
-    appendID=appendDRT,
-    assetAmount=1,
-    rowsContributed=3,
-    newHash=b"DGVWUSNA--new--ASUDBQ",
-    enclaveApproval=1
-)
-print("")
-print(".....Join Data Pool Successfull.....","\n")
+# print(".....Join Data Pool.....","\n")
+# print("1. Purchase Append DRT.....")
+# buy_append = buyDRT_method(
+#     client=client, 
+#     appID=appID, 
+#     buyer=contributor, 
+#     drtID=appendDRT, 
+#     amountToBuy=1, 
+#     paymentAmount=1000000
+# )
+# print("2. Redeem Append DRT.....")
+# contributorAssetID = joinDataPool_method(
+#     client=client,
+#     appID=appID,
+#     redeemer=contributor,
+#     enclave=enclave,
+#     appendID=appendDRT,
+#     assetAmount=1,
+#     rowsContributed=3,
+#     newHash=b"DGVWUSNA--new--ASUDBQ",
+#     enclaveApproval=1
+# )
+# print("")
+# print(".....Join Data Pool Successfull.....","\n")
 print(".....Execute DRT.....","\n")
 execute_drt = executeDRT_method(
     client=client,
@@ -131,3 +135,49 @@ execute_drt = executeDRT_method(
 )
 print("")
 print(".....Execute DRT Successfull.....","\n")
+print(".....Join Data Pool.....","\n")
+print("1. Purchase Append DRT.....")
+buy_append = buyDRT_method(
+    client=client, 
+    appID=appID, 
+    buyer=contributor, 
+    drtID=appendDRT, 
+    amountToBuy=1, 
+    paymentAmount=1000000
+)
+
+print("2. add pending contributor.....")
+add_pending = addPendingContributor_method(
+    client=client,
+    redeemer=contributor,
+    appID=appID,
+    appendID=appendDRT,
+    paymentAmount=3000000,
+    assetAmount=1
+)
+print("3. confirm pending contributor from enclave.....")
+contributor_confirm = pendingContributorConfirm_method(
+    client=client,
+    appID=appID,
+    contributor=contributor,
+    enclave=enclave,
+    rowsContributed=3,
+    newHash=b"DGVWUSNA--new_confirm--ASUDBQ",
+    enclaveApproval=1
+)
+#print(contributor)
+#retrieve the asset Id of the conrtibutor token from blockchain
+box_name = decode_address(contributor.getAddress())
+box_contents = client.application_box_by_name(application_id=appID,box_name=box_name)
+box_contents = box_contents["value"]
+bytes = base64.b64decode(box_contents)
+box_values = struct.unpack('!qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqql', bytes)
+contributor_ID = box_values[0]
+
+print("4. claim contributor token.....")
+contributor_claim = claimContributor_method(
+    client=client,
+    appID=appID,
+    contributorAccount=contributor,
+    contributorAssetID=contributor_ID
+)
