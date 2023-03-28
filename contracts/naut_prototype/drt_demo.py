@@ -23,9 +23,6 @@ def approval():
     global_drt_payment_row_average = Bytes("drt_payment_row_average")       # Computational variable for royalty fees
     global_dataset_total_rows = Bytes("dataset_total_rows")                 # Computational variable for royalty fees
     global_total_fees = Bytes("total_fees")                                 # Current total fees available
-    global_new_contributor = Bytes("new_contributor_asset")                 # Outstanding contributor token to be added into box storage
-    global_new_contributor_address = Bytes("new_contributor_address")       # Outstanding contributor token address to be claimed
-    global_new_contributor_variables = Bytes("new_contributor_variables")   # Outstanding contributor token variables to be claimed
     global_init = Bytes("init_progress")                                    # Smart Contract initialisation progress variable
     
     # Methods
@@ -61,6 +58,7 @@ def approval():
                 Assert(Gtxn[txnId].asset_close_to() == Global.zero_address())
         ])
 
+# inner trasnction to send payment of algos from one address to another
     @Subroutine(TealType.none)
     def inner_sendPayment(receiver: Expr, amount: Expr):
     # """
@@ -105,7 +103,7 @@ def approval():
             Return (InnerTxn.created_asset_id()) #return asset id
         )
 
-# function to transfer asset-id to another account
+# inner transaction to transfer asset-id to another account
     @Subroutine(TealType.none)
     def inner_asset_transfer_txn(
         asset_id: Expr,
@@ -176,10 +174,6 @@ def approval():
         
         contributor_box_variables = ScratchVar()
         
-        contributor_variables_1 = App.globalGet(global_new_contributor_variables)
-        contributor_variables_2 = App.globalGet(global_new_contributor_address)
-        contributor_variables_3 = App.globalGet(global_new_contributor_address)
-        
         init = App.globalGet(global_init)
         return Seq(
             #basic sanity checks
@@ -203,8 +197,6 @@ def approval():
                     #ensure rows added is not zero
                     init_rows != Int(0),
                     
-                    #ensure there is not a pending contributor token to transfer
-                    
                     init == Int(0),
                 )
             ),
@@ -221,15 +213,8 @@ def approval():
             #name: Expr, unit_name: Expr, amount: Expr, asset_url: Expr, binHash: Expr, note: Expr
             contrib_id.store(inner_asset_create_txn(Bytes("Contributor"),Bytes("CONTRIB") ,Itob(Int(1)),itoa(Global.current_application_id()), DEFAULT_HASH, DEFAULT_NOTE)), #use scratch variable to store asset id of contributor token
             
-            # store newly created asset ID, address, variables in global variables
-            App.globalPut(global_new_contributor, contrib_id.load()),
-            App.globalPut(global_new_contributor_address, added_account),
             # store newly created asset ID, address, variables in box storage
             contributor_box_variables.store(Concat(Itob(contrib_id.load()),Itob(App.globalGet(global_drt_payment_row_average)), Itob(Btoi(Txn.application_args[1])), added_account)),
-         
-           
-            #test and register added account as owner
-            App.globalPut(global_new_contributor_variables, Concat(Itob(App.globalGet(global_drt_payment_row_average)),Itob(Btoi(Txn.application_args[1])), added_account)),
             Pop(App.box_create(Txn.accounts[1], Int(500))),
             App.box_replace(Txn.accounts[1],Int(0),contributor_box_variables.load()),
            
@@ -242,7 +227,7 @@ def approval():
         )
 
 # CREATE DRT
-# 1. Function to initiliase the creation of a DRT
+# # 1. Function to initiliase the creation of a DRT
     @Subroutine(TealType.none)
     def create_drt():
         asset_id = ScratchVar()
@@ -281,7 +266,7 @@ def approval():
             Approve()
         )
 
-# 2. Function to store DRT in box storage and register the smart contract as current owner
+# # 2. Function to store DRT in box storage and register the smart contract as current owner
     @Subroutine(TealType.none)
     def drt_to_box(asset_id: Expr):
         
@@ -474,7 +459,7 @@ def approval():
         )
 
 # JOIN DATA POOL
-# 1. Function to add a data contributor temporarily pending approval from the enclave
+# # 1. Function to add a data contributor temporarily pending approval from the enclave
 #       (you can only add one set of data at a time)
     @Subroutine(TealType.none)
     def add_contributor_pending(): 
@@ -515,7 +500,7 @@ def approval():
         Approve(),
         )
 
-# 2. Function to approve the pending contributors contribution 
+# # 2. Function to approve the pending contributors contribution 
     @Subroutine(TealType.none)
     def add_contributor_approved():
         contrib_id = ScratchVar()  
@@ -568,7 +553,8 @@ def approval():
             Approve(),
         )
  
-# 3. Function to claim contributor token toke after being approved by enclave
+# # 3. Function to claim contributor token toke after being approved by enclave
+# # This function also used in last step of the setup of the smart contract after init_contract()
     @Subroutine(TealType.none)
     def add_contributor_claim():
         #store senders asset holdings of contributor token to check for opting in 
@@ -911,7 +897,10 @@ def approval():
 # 1. If smart contract does not exist it will trigger the initialisation sequence contained in the "init" variable.
 # 2. An Optin transaction is simply approved.
 # 3. If the transaction type is a NoOp transaction, i.e. an Application Call, then it checks the first argument of the call which must be equal to one of the method call variables:
-# "op_create_drt", "op_update_data_package","op_update_drt_price", "op_box_store_transfer", "op_buy_drt", "op_claim_royalty", "op_append_drt","op_init_contract"
+# "op_create_drt","op_update_drt_price", , "op_buy_drt", "op_claim_royalty", "op_append_drt","op_init_contract", "op_drt_ownership_change"
+# "op_drt_ownership_change",  " op_drt_to_box" "op_con_ownership_change", "op_de_list_drt", "op_list_drt", "op_execute_drt", "op_add_contributor_pending"
+# "op_add_contributor_approved", "op_add_contributor_claim"
+
     return program.event(
         init=Seq( 
             [
