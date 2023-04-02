@@ -897,7 +897,7 @@ def approval():
 # 1. If smart contract does not exist it will trigger the initialisation sequence contained in the "init" variable.
 # 2. An Optin transaction is simply approved.
 # 3. If the transaction type is a NoOp transaction, i.e. an Application Call, then it checks the first argument of the call which must be equal to one of the method call variables:
-# "op_create_drt","op_update_drt_price", , "op_buy_drt", "op_claim_royalty", "op_append_drt","op_init_contract", "op_drt_ownership_change"
+# "op_create_drt","op_update_drt_price", "op_buy_drt", "claim_royalty_contributor","op_init_contract"
 # "op_drt_ownership_change",  " op_drt_to_box" "op_con_ownership_change", "op_de_list_drt", "op_list_drt", "op_execute_drt", "op_add_contributor_pending"
 # "op_add_contributor_approved", "op_add_contributor_claim"
 
