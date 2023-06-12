@@ -690,8 +690,6 @@ def approval():
                     Txn.application_args.length() == Int(1), 
                     #ensure nautilus payout is greater than zero
                     nautilus_payout > Int(0),
-                    #ensure royalty fee is less than or equal to the total
-                    App.globalGet(global_total_fees) >= nautilus_payout,
                     # check the sender is the stored nautilus account
                     Txn.sender() == App.globalGet(global_nautilus_address),
                     
@@ -700,8 +698,6 @@ def approval():
             ),
             #transfer the amount
             inner_sendPayment(Txn.sender(), nautilus_payout),
-            #minus fee payout from total fees collected
-            App.globalPut(global_total_fees, (App.globalGet(global_total_fees) - nautilus_payout)),
             #minus the fee payout from nautilus payout
             App.globalPut(global_nautilus_pool, (App.globalGet(global_nautilus_pool)- nautilus_payout)),
 

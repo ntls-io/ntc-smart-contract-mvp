@@ -15,6 +15,8 @@ from helpers.setup import getAlgodClient
 from helpers.resources import getTemporaryAccount, optInToAsset, createDummyAsset
 from base64 import b64decode, b64encode
 
+from python_sdk.methods.sc_methods import claimFeeNautilus
+
 client = getAlgodClient()
 
 creator = getTemporaryAccount(client)
@@ -164,11 +166,17 @@ contributor_claim = claimContributor_method(
 )
 
 ## claim royalties as a contributor - creator
-print("4. claim royalties from creators .....")
+print("5. claim royalties from creators .....")
 royalyties_claim = claimRoyalties_contributor(
     client=client,
     appID=appID,
     contributorAccount=creator,
     contributorAssetID=contributorDRT_1 
+)
+print("6. claim royalties from nautilus.....")
+royalyties_claim = claimFeeNautilus(
+    client=client,
+    appID=appID,
+    nautilus=nautilus
 )
 

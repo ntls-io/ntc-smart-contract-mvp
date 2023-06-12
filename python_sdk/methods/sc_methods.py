@@ -10,6 +10,7 @@ from contracts.naut_prototype.drt_demo import approval,clear
 from contracts.pyteal_helpers.strings import itoa
 from base64 import b64decode, encode
 from helpers.resources import getTemporaryAccount, optInToAsset, createDummyAsset
+from python_sdk.transaction_constructions.operation_txns import claimFeeNautilus_txn
 from transaction_constructions.operation_txns import createDRT_txn, claimDRT_txn, delistDRT_txn, listDRT_txn, buyDRT_txn, appendRedeemDRT_txn, oldclaimContributor_txn, executeDRT_txn, pendingContributor_txn, confirmContributor_txn, claimContributor_txn, claimRoyalties_contributortxn
 
 
@@ -745,6 +746,45 @@ def claimRoyalties_contributor(
     )
 
     signedTxn = claimTxn.sign(contributorAccount.getPrivateKey())
+
+    txid = client.send_transaction(signedTxn)
+
+    try:
+        response = waitForTransaction(client, txid)  
+        return response
+      
+    except Exception as err:
+        print("Uknown error..")
+        print(err)
+        return err
+
+
+def claimFeeNautilus(
+    client: AlgodClient,
+    appID: int,
+    nautilus: Account,
+    
+):
+    """Claim contributor token.
+
+    Args:
+        client: An algod client.
+        contributorAccount: The account that contributor data and needs to claim their token
+        contributorAssetID: The asset ID of the contributor token.
+
+    Returns:
+        success or err.
+
+    """
+    appAddr = get_application_address(appID)
+
+    claimTxn = claimFeeNautilus_txn(
+        client=client,
+        appID=appID,
+        nautilusAccount=nautilus
+    )
+
+    signedTxn = claimTxn.sign(nautilus.getPrivateKey())
 
     txid = client.send_transaction(signedTxn)
 

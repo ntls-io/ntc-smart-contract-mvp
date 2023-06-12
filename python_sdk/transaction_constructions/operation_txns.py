@@ -633,20 +633,6 @@ def claimRoyalties_contributortxn(
     Returns:
         success or err.
         
-    const txn = algosdk.makeApplicationCallTxnFromObject({
-      from: contributorAddr,
-      appIndex: Number(appID),
-      suggestedParams: params,
-      onComplete: onComplete,
-      appArgs: appArgs,
-      foreignAssets: [Number(contributorAssetID)],
-      boxes: [
-        {
-          appIndex: Number(appID),
-          name: algosdk.encodeUint64(contributorAssetID)
-        }
-      ]
-    });
     """  
     suggestedParams = client.suggested_params()
     
@@ -669,4 +655,40 @@ def claimRoyalties_contributortxn(
     )
 
     return contributorRoyaltiesTxn
+
+
+def claimFeeNautilus_txn(
+    client: AlgodClient,
+    appID: int,
+    nautilusAccount: Account
+):
+    """Claim contributor token.
+
+    Args:
+        client: An algod client.
+        appID: The app ID of the smart contract Data Pool
+        contributorAccount: The account that contributor data and needs to claim their token
+        contributorAssetID: The asset ID of the contributor token.
+
+    Returns:
+        success or err.
+        
+    """  
+    suggestedParams = client.suggested_params()
+    
+    appArgs = [
+        b"nautilus_claim", 
+    ]
+
+    
+    NautilusFeeTxn = transaction.ApplicationCallTxn(
+        sender=nautilusAccount.getAddress(),
+        index=appID,
+        on_complete=transaction.OnComplete.NoOpOC,
+        app_args=appArgs,
+        sp=suggestedParams,
+    )
+
+    return NautilusFeeTxn
+
 
