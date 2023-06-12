@@ -11,8 +11,9 @@ DEFAULT_NOTE= Bytes("")
 DEFAULT_URL= Bytes("")
 NAUTILUS_EXECUTION_FEE = Int(3000000) #3 algos
 NAUTILUS_EXCHANGE_ID = Int(10001)
-EXECUTE_DRT_FEE = Int(1000000)
 PENDING_CONTRIBUTOR = Int(20001)
+
+
 
 def approval():
     # Stored global variables
@@ -24,6 +25,8 @@ def approval():
     global_dataset_total_rows = Bytes("dataset_total_rows")                 # Computational variable for royalty fees
     global_total_fees = Bytes("total_fees")                                 # Current total fees available
     global_init = Bytes("init_progress")                                    # Smart Contract initialisation progress variable
+    global_nautilus_pool = Bytes("nautilus_pool")                           # Nautilus Fee Pool
+    global_nautilus_address = Bytes("nautilus")                             # Nautilus address
     
     # Methods
     op_create_drt = Bytes("create_drt")                                 # Method call  
@@ -40,6 +43,7 @@ def approval():
     op_add_contributor_pending = Bytes("add_contributor_pending")       # Method Call
     op_add_contributor_approved = Bytes("add_contributor_approved")     # Method Call
     op_add_contributor_claim = Bytes("add_contributor_claim")           # Method Call
+    op_claim_royalty_nautilus = Bytes("nautilus_claim")
     
     @Subroutine(TealType.none)
     def defaultTransactionChecks(txnId: Expr):
@@ -83,7 +87,7 @@ def approval():
         #convert to pyteal uint64
         btoi_amount = Btoi(amount)
 
-        return Seq(      
+        return Seq(       
             InnerTxnBuilder.Begin(),
             InnerTxnBuilder.SetFields( 
                 {
@@ -145,13 +149,13 @@ def approval():
         g_average = App.globalGet(global_drt_payment_row_average)
         royalty_fee = ScratchVar()
         return Seq(
-            contents := App.box_get(itoa(asset_id)),
+            contents := App.box_get(Itob(asset_id)),
             
             l_average.store(ExtractUint64(contents.value(), Int(0))),
             l_size.store(ExtractUint64(contents.value(), Int(8))),
             
             royalty_fee.store(l_size.load()*(g_average - l_average.load())),
-            App.globalPut(Bytes("royalty_fee"),royalty_fee.load()),
+            #App.globalPut(Bytes("royalty_fee"),royalty_fee.load()),
             #App.localPut(acc, local_royalty_fee, royalty_fee.load()),
             Return (royalty_fee.load())
         )     
@@ -175,7 +179,9 @@ def approval():
         contributor_box_variables = ScratchVar()
         
         init = App.globalGet(global_init)
+        
         return Seq(
+            
             #basic sanity checks
             defaultTransactionChecks(Int(0)),
             program.check_self(
@@ -200,18 +206,19 @@ def approval():
                     init == Int(0),
                 )
             ),
+            #opup.maximize_budget(Int(1000)),
             #create append DRT
             #name: Expr, unit_name: Expr, amount: Expr, asset_url: Expr, binHash: Expr, note: Expr
             append_id.store(inner_asset_create_txn(Txn.application_args[3],Txn.application_args[4] ,Txn.application_args[5], Txn.application_args[7] , Txn.application_args[8], DEFAULT_NOTE)), #use scratch variable to store asset id of contributor token
             #store price and supply and listed for sale - int(1000000) = 1 Algo
-            App.globalPut(itoa(append_id.load()),Concat(Txn.application_args[6], Txn.application_args[5])),
+            App.globalPut(Itob(append_id.load()),Concat(Txn.application_args[6], Txn.application_args[5])),
             #store asset id in global variable
             App.globalPut(global_append_asset_id,append_id.load()),
                 
             #create contributor token
             #store smart contract ID in asset URL field
             #name: Expr, unit_name: Expr, amount: Expr, asset_url: Expr, binHash: Expr, note: Expr
-            contrib_id.store(inner_asset_create_txn(Bytes("Contributor"),Bytes("CONTRIB") ,Itob(Int(1)),itoa(Global.current_application_id()), DEFAULT_HASH, DEFAULT_NOTE)), #use scratch variable to store asset id of contributor token
+            contrib_id.store(inner_asset_create_txn(Bytes("Contributor"),Bytes("CONTRIB") ,Itob(Int(1)),Itob(Global.current_application_id()), DEFAULT_HASH, DEFAULT_NOTE)), #use scratch variable to store asset id of contributor token
             
             # store newly created asset ID, address, variables in box storage
             contributor_box_variables.store(Concat(Itob(contrib_id.load()),Itob(App.globalGet(global_drt_payment_row_average)), Itob(Btoi(Txn.application_args[1])), added_account)),
@@ -222,7 +229,7 @@ def approval():
             App.globalPut(global_data_package_hash, new_hash),
             #update global row counter
             App.globalPut(global_dataset_total_rows, (init_rows + App.globalGet(global_dataset_total_rows))),
-
+            #opup.ensure_budget(Int(2000)),
             Approve(),
         )
 
@@ -261,7 +268,7 @@ def approval():
             #incremement counter
             App.globalPut(global_drt_counter, App.globalGet(global_drt_counter) + Int(1)),
             
-            App.globalPut(itoa(asset_id.load()), exchangeRate_supply.load()),
+            App.globalPut(Itob(asset_id.load()), exchangeRate_supply.load()),
             
             Approve()
         )
@@ -270,7 +277,7 @@ def approval():
     @Subroutine(TealType.none)
     def drt_to_box(asset_id: Expr):
         
-        drt_variables = App.globalGet(itoa(asset_id))
+        drt_variables = App.globalGet(Itob(asset_id))
         supply = ExtractUint64(drt_variables,Int(8))
         drt_exists_in_account = AssetHolding.balance(Global.current_application_address(), asset_id)
         drt_box_name = Concat(Itob(asset_id),Global.current_application_address())
@@ -296,7 +303,7 @@ def approval():
             ),
             Pop(App.box_create(drt_box_name, Int(1000))),
             App.box_replace(drt_box_name,Int(0), drt_variables_listed),
-            App.globalDel(itoa(asset_id)),
+            App.globalDel(Itob(asset_id)),
             
             Approve()
         )
@@ -390,9 +397,11 @@ def approval():
     def buy_drt():
         assetToBuy = Gtxn[0].assets[0]
         paymentAmount = Gtxn[1].amount()
-
+        nautilus_fee = Div(paymentAmount*Int(5),Int(100))
+        gn_amount = paymentAmount - nautilus_fee
+        pool_fee = ScratchVar()
         buyerOptIn = AssetHolding.balance(Gtxn[0].sender(), assetToBuy)
-        g_n = compute_global_drt_payment_row_average(App.globalGet(global_drt_payment_row_average), App.globalGet(global_dataset_total_rows) , paymentAmount)
+        g_n = compute_global_drt_payment_row_average(App.globalGet(global_drt_payment_row_average), App.globalGet(global_dataset_total_rows) , gn_amount)
         
         drt_box_name = Concat(Itob(assetToBuy),Global.current_application_address())
         supply = ScratchVar()
@@ -441,7 +450,9 @@ def approval():
             ),
             #store it 
             App.globalPut(global_drt_payment_row_average, g_n),
-            App.globalPut(global_total_fees, (paymentAmount + App.globalGet(global_total_fees))),
+            pool_fee.store(paymentAmount - nautilus_fee),
+            App.globalPut(global_total_fees, (pool_fee.load() + App.globalGet(global_total_fees))),
+            App.globalPut(global_nautilus_pool, (nautilus_fee + App.globalGet(global_nautilus_pool))),
             
             #change current supply of previous owner
             new_supply.store(supply.load() - Btoi(Gtxn[0].application_args[1])),
@@ -463,7 +474,7 @@ def approval():
 #       (you can only add one set of data at a time)
     @Subroutine(TealType.none)
     def add_contributor_pending(): 
-
+        nautilus_fee = Gtxn[1].amount()
         init = App.globalGet(global_init)
         
         return Seq(
@@ -493,6 +504,8 @@ def approval():
                     init != Int(0),
                 )
             ),
+            # add nauitlus fee to the nautilus pool global
+            App.globalPut(global_nautilus_pool, (nautilus_fee + App.globalGet(global_nautilus_pool))),
             #store user as pending contributor
             Pop(App.box_create(Txn.sender(), Int(500))),
             App.box_replace(Txn.sender(),Int(0), Itob(PENDING_CONTRIBUTOR)),
@@ -561,7 +574,6 @@ def approval():
         contributorOptIn = AssetHolding.balance(Txn.sender(), Txn.assets[0])
         box_contrib_assetID = ScratchVar()
         box_contrib_variables = ScratchVar()
-        
         init = App.globalGet(global_init)
         return Seq(     
         #basic sanity checks
@@ -585,8 +597,8 @@ def approval():
             # the global variable holding the asset ID, we inherently check that the correct
             # box reference is being used as the name for the box storage
             
-            Pop(App.box_create(itoa(box_contrib_assetID.load()), Int(500))),
-            App.box_replace(itoa(box_contrib_assetID.load()),Int(0),box_contrib_variables.load()),            
+            Pop(App.box_create(Itob(box_contrib_assetID.load()), Int(500))),
+            App.box_replace(Itob(box_contrib_assetID.load()),Int(0),box_contrib_variables.load()),            
             
             #delete old pending contributor box
             Pop(App.box_delete(Txn.sender())),
@@ -600,9 +612,8 @@ def approval():
                 App.globalPut(global_init, Int(1)),
                 Pop(App.box_create(Concat(Itob(Txn.assets[1]),Global.current_application_address()), Int(1000))),
                 
-                App.box_replace(Concat(Itob(Txn.assets[1]),Global.current_application_address()), Int(0) ,Concat(App.globalGet(itoa(Txn.assets[1])), Itob(NAUTILUS_EXCHANGE_ID))),
-                App.globalDel(itoa(Txn.assets[1])),
-                
+                App.box_replace(Concat(Itob(Txn.assets[1]),Global.current_application_address()), Int(0) ,Concat(App.globalGet(Itob(Txn.assets[1])), Itob(NAUTILUS_EXCHANGE_ID))),
+                App.globalDel(Itob(Txn.assets[1])),
                 Approve(),
             ).Else(
                 Approve(),
@@ -621,7 +632,7 @@ def approval():
         init = App.globalGet(global_init)
         return Seq(
             accountAssetBalance,
-            registered_owner.store(App.box_extract(itoa(asset_id), Int(16), Int(32))),
+            registered_owner.store(App.box_extract(Itob(asset_id), Int(16), Int(32))),
             #basic santiy checks
             defaultTransactionChecks(Int(0)),
             program.check_self(
@@ -651,9 +662,49 @@ def approval():
             #transfer the amount
             inner_sendPayment(Txn.sender(), royalty_fee),
             #reset the box variables for contributor token ( as if the user has just conrtibuted )
-            App.box_replace(itoa(asset_id), Int(0), Itob(App.globalGet(global_drt_payment_row_average))),
+            App.box_replace(Itob(asset_id), Int(0), Itob(App.globalGet(global_drt_payment_row_average))),
             #minus fee payout from total fees collected
             App.globalPut(global_total_fees, (App.globalGet(global_total_fees) - fees_change.load())),
+    
+            Approve(),
+        ) 
+   
+   
+   # Function to claim royalty fee from the ownership of a contributor token
+    @Subroutine(TealType.none)
+    def claim_royalty_nautilus():
+        nautilus_payout = App.globalGet(global_nautilus_pool)
+        
+        init = App.globalGet(global_init)
+        return Seq(
+            #basic santiy checks
+            defaultTransactionChecks(Int(0)),
+            program.check_self(
+                group_size=Int(1), #ensure 1 transaction
+                group_index=Int(0),
+            ),
+            program.check_rekey_zero(1),
+            Assert(
+                And(
+                    #ensure the correct amount of arguments
+                    Txn.application_args.length() == Int(1), 
+                    #ensure nautilus payout is greater than zero
+                    nautilus_payout > Int(0),
+                    #ensure royalty fee is less than or equal to the total
+                    App.globalGet(global_total_fees) >= nautilus_payout,
+                    # check the sender is the stored nautilus account
+                    Txn.sender() == App.globalGet(global_nautilus_address),
+                    
+                    init != Int(0),
+                )
+            ),
+            #transfer the amount
+            inner_sendPayment(Txn.sender(), nautilus_payout),
+            #minus fee payout from total fees collected
+            App.globalPut(global_total_fees, (App.globalGet(global_total_fees) - nautilus_payout)),
+            #minus the fee payout from nautilus payout
+            App.globalPut(global_nautilus_pool, (App.globalGet(global_nautilus_pool)- nautilus_payout)),
+
     
             Approve(),
         ) 
@@ -762,7 +813,7 @@ def approval():
         newContributor = Gtxn[3].sender() #account_enclave
         contributor_id = Gtxn[3].assets[0] # asset_id
 
-        contributor_box_name = itoa(contributorTraded) #assetid + account_2
+        contributor_box_name = Itob(contributorTraded) #assetid + account_2
         contributor_owner = ScratchVar()
         init = App.globalGet(global_init)
         return Seq(
@@ -821,7 +872,7 @@ def approval():
         asset_creator = AssetParam.creator(Gtxn[0].xfer_asset()) #account_app
         assetAmount = Gtxn[0].asset_amount() #asset amount
         
-        #transaction 2 payment values
+        #transaction 2 execution fee payment values
         paymentAmount = Gtxn[1].amount() #traded amount
         paymentReceiver = Gtxn[1].receiver() # account_2
         paymentSender = Gtxn[1].sender() #account_enclave
@@ -837,9 +888,6 @@ def approval():
         app_box_name = Concat(Itob(assetTraded), Global.current_application_address())
         app_supply = ScratchVar()
         new_app_supply = ScratchVar()
-        
-        new_fees = ScratchVar()
-        current_fees = App.globalGet(global_total_fees)
         
         init = App.globalGet(global_init)
         
@@ -870,7 +918,7 @@ def approval():
                     registered_owner_supply.load() >= Int(1),
                     app_supply.load() >= Int(1),
                     
-                    paymentAmount == EXECUTE_DRT_FEE,
+                    paymentAmount == NAUTILUS_EXECUTION_FEE,
                     
                     init != Int(0),
                 )
@@ -884,10 +932,8 @@ def approval():
             App.box_replace(app_box_name, Int(8) , Itob(new_app_supply.load())),
 
             
-            # add fee paypout to global total fees
-            new_fees.store(current_fees + paymentAmount),
-            App.globalPut(global_total_fees,new_fees.load() ),
-            
+            # add fee paypout to nautilus pool fees
+            App.globalPut(global_nautilus_pool, (paymentAmount + App.globalGet(global_nautilus_pool))),
             Approve(),
             
         )
@@ -910,16 +956,18 @@ def approval():
                     # Check the arguments length
                     Txn.application_args.length() == Int(0),
                     # Check the accounts length 
-                    Txn.accounts.length() == Int(1),
+                    Txn.accounts.length() == Int(2),
                     ),                  
                 # Store nautilus company wallet address 
-                App.globalPut(global_enclave_address, Txn.accounts[1]), 
+                App.globalPut(global_enclave_address, Txn.accounts[1]),
+                App.globalPut(global_nautilus_address, Txn.accounts[2]),
                 # Initialise global variables
                 App.globalPut(global_drt_counter, Int(0)),
                 App.globalPut(global_drt_payment_row_average, Int(0)),
                 App.globalPut(global_dataset_total_rows, Int(0)), 
                 App.globalPut(global_total_fees, Int(0)),
                 App.globalPut(global_data_package_hash, Bytes("")),
+                App.globalPut(global_nautilus_pool, Int(0)),
                 #init variable
                 App.globalPut(global_init, Int(0)),
                 # Then approve.
@@ -988,6 +1036,10 @@ def approval():
                     Txn.application_args[0] == op_add_contributor_claim,
                     add_contributor_claim()
                 ],
+                [
+                    Txn.application_args[0] == op_claim_royalty_nautilus,
+                    claim_royalty_nautilus()
+                ]
                 
             ),
             Reject(),

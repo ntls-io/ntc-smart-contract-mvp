@@ -4,7 +4,7 @@ import struct
 import bitstring
 from algosdk.encoding import decode_address, encode_address,base64
 import pytest
-from methods.sc_methods import createAndClaimDRT_method, delistDRT_method, listDRT_method, buyDRT_method, redeemAppendDRT_method, claimContributor_method, joinDataPool_method, executeDRT_method, addPendingContributor_method, pendingContributorConfirm_method
+from methods.sc_methods import createAndClaimDRT_method, delistDRT_method, listDRT_method, buyDRT_method, redeemAppendDRT_method, claimContributor_method, joinDataPool_method, executeDRT_method, addPendingContributor_method, pendingContributorConfirm_method, claimRoyalties_contributor
 from algosdk import account, encoding
 from algosdk.logic import get_application_address
 from algosdk import *
@@ -21,18 +21,21 @@ creator = getTemporaryAccount(client)
 enclave = getTemporaryAccount(client)
 buyer = getTemporaryAccount(client)
 contributor = getTemporaryAccount(client)
+nautilus = getTemporaryAccount(client)
 
 print("\n","Alice (data pool creator account):", creator.getAddress())
 print("Enclave (enclacve account):", enclave.getAddress())
 print("Bob (buyer account):", buyer.getAddress())
 print("Carla (data contributor account)", contributor.getAddress(), "\n")
+print("Nautilus (company account)", nautilus.getAddress(), "\n")
 
 print(".....create Data Pool.....", "\n")
 
 appID, appAccount, appendDRT, contributorDRT_1 = completeDataPoolSetup(
     client=client, 
     creator=creator, 
-    enclave=enclave, 
+    enclave=enclave,
+    nautilus=nautilus,
     fundingAmount=2000000, 
     noRowsContributed=5,
     dataPackageHash=b"DGVWUSNA--init--ASUDBQ",
@@ -100,30 +103,8 @@ buy_test = buyDRT_method(
     )
 
 print("")
-# print(".....Join Data Pool.....","\n")
-# print("1. Purchase Append DRT.....")
-# buy_append = buyDRT_method(
-#     client=client, 
-#     appID=appID, 
-#     buyer=contributor, 
-#     drtID=appendDRT, 
-#     amountToBuy=1, 
-#     paymentAmount=1000000
-# )
-# print("2. Redeem Append DRT.....")
-# contributorAssetID = joinDataPool_method(
-#     client=client,
-#     appID=appID,
-#     redeemer=contributor,
-#     enclave=enclave,
-#     appendID=appendDRT,
-#     assetAmount=1,
-#     rowsContributed=3,
-#     newHash=b"DGVWUSNA--new--ASUDBQ",
-#     enclaveApproval=1
-# )
-# print("")
-# print(".....Join Data Pool Successfull.....","\n")
+
+
 print(".....Execute DRT.....","\n")
 execute_drt = executeDRT_method(
     client=client,
@@ -131,7 +112,7 @@ execute_drt = executeDRT_method(
     appID=appID,
     assetID=id_DRT,
     assetAmount=1,
-    paymentAmount=1000000   
+    paymentAmount=3000000   
 )
 print("")
 print(".....Execute DRT Successfull.....","\n")
@@ -165,8 +146,8 @@ contributor_confirm = pendingContributorConfirm_method(
     newHash=b"DGVWUSNA--new_confirm--ASUDBQ",
     enclaveApproval=1
 )
-#print(contributor)
-#retrieve the asset Id of the conrtibutor token from blockchain
+# print(contributor)
+# retrieve the asset Id of the conrtibutor token from blockchain
 box_name = decode_address(contributor.getAddress())
 box_contents = client.application_box_by_name(application_id=appID,box_name=box_name)
 box_contents = box_contents["value"]
@@ -181,3 +162,13 @@ contributor_claim = claimContributor_method(
     contributorAccount=contributor,
     contributorAssetID=contributor_ID
 )
+
+## claim royalties as a contributor - creator
+print("4. claim royalties from creators .....")
+royalyties_claim = claimRoyalties_contributor(
+    client=client,
+    appID=appID,
+    contributorAccount=creator,
+    contributorAssetID=contributorDRT_1 
+)
+

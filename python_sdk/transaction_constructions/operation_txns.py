@@ -611,8 +611,62 @@ def claimContributor_txn(
         app_args=appArgs,
         foreign_assets=assets,
         sp=suggestedParams,
-        boxes=[[appID, str(contributorAssetID)], [appID, decode_address(contributorAccount.getAddress())]],
+        boxes=[[appID, contributorAssetID.to_bytes(8, 'big')], [appID, decode_address(contributorAccount.getAddress())]],
     )
 
     return contributorClaimTxn
+
+def claimRoyalties_contributortxn(
+    client: AlgodClient,
+    appID: int,
+    contributorAccount: Account,
+    contributorAssetID: int,
+):
+    """Claim contributor token.
+
+    Args:
+        client: An algod client.
+        appID: The app ID of the smart contract Data Pool
+        contributorAccount: The account that contributor data and needs to claim their token
+        contributorAssetID: The asset ID of the contributor token.
+
+    Returns:
+        success or err.
+        
+    const txn = algosdk.makeApplicationCallTxnFromObject({
+      from: contributorAddr,
+      appIndex: Number(appID),
+      suggestedParams: params,
+      onComplete: onComplete,
+      appArgs: appArgs,
+      foreignAssets: [Number(contributorAssetID)],
+      boxes: [
+        {
+          appIndex: Number(appID),
+          name: algosdk.encodeUint64(contributorAssetID)
+        }
+      ]
+    });
+    """  
+    suggestedParams = client.suggested_params()
+    
+    appArgs = [
+        b"claim_royalty_contributor", 
+    ]
+    
+    assets = [
+        contributorAssetID,
+    ]
+    
+    contributorRoyaltiesTxn = transaction.ApplicationCallTxn(
+        sender=contributorAccount.getAddress(),
+        index=appID,
+        on_complete=transaction.OnComplete.NoOpOC,
+        app_args=appArgs,
+        foreign_assets=assets,
+        sp=suggestedParams,
+        boxes=[[appID, contributorAssetID.to_bytes(8, 'big')]],
+    )
+
+    return contributorRoyaltiesTxn
 

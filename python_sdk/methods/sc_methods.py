@@ -10,7 +10,7 @@ from contracts.naut_prototype.drt_demo import approval,clear
 from contracts.pyteal_helpers.strings import itoa
 from base64 import b64decode, encode
 from helpers.resources import getTemporaryAccount, optInToAsset, createDummyAsset
-from transaction_constructions.operation_txns import createDRT_txn, claimDRT_txn, delistDRT_txn, listDRT_txn, buyDRT_txn, appendRedeemDRT_txn, oldclaimContributor_txn, executeDRT_txn, pendingContributor_txn, confirmContributor_txn, claimContributor_txn
+from transaction_constructions.operation_txns import createDRT_txn, claimDRT_txn, delistDRT_txn, listDRT_txn, buyDRT_txn, appendRedeemDRT_txn, oldclaimContributor_txn, executeDRT_txn, pendingContributor_txn, confirmContributor_txn, claimContributor_txn, claimRoyalties_contributortxn
 
 
 from helpers.account import Account
@@ -710,6 +710,46 @@ def claimContributor_method(
         # assert response.innerTxns[0]["txn"]["txn"]["snd"] == appAddr
         # assert response.innerTxns[0]["txn"]["txn"]["arcv"] == contributorAccount.getAddress()
         # assert response.innerTxns[0]["txn"]["txn"]["xaid"] == contributorAssetID
+        return response
+      
+    except Exception as err:
+        print("Uknown error..")
+        print(err)
+        return err
+
+
+def claimRoyalties_contributor(
+    client: AlgodClient,
+    appID: int,
+    contributorAccount: Account,
+    contributorAssetID: int,
+):
+    """Claim contributor token.
+
+    Args:
+        client: An algod client.
+        contributorAccount: The account that contributor data and needs to claim their token
+        contributorAssetID: The asset ID of the contributor token.
+
+    Returns:
+        success or err.
+
+    """
+    appAddr = get_application_address(appID)
+
+    claimTxn = claimRoyalties_contributortxn(
+        client=client,
+        appID=appID,
+        contributorAccount=contributorAccount,
+        contributorAssetID=contributorAssetID
+    )
+
+    signedTxn = claimTxn.sign(contributorAccount.getPrivateKey())
+
+    txid = client.send_transaction(signedTxn)
+
+    try:
+        response = waitForTransaction(client, txid)  
         return response
       
     except Exception as err:

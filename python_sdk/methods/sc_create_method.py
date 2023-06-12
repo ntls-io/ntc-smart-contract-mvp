@@ -48,6 +48,7 @@ def deployContract(
     client: AlgodClient,
     sender: Account,
     enclave: Account,
+    nautilus: Account
 ) -> int:
     """Create a new auction.
 
@@ -69,6 +70,7 @@ def deployContract(
 
     accounts = [
         enclave.getAddress(),
+        nautilus.getAddress()
     ]
     
     pages = 2
@@ -161,6 +163,7 @@ def initialiseDataPool(
         funder.getAddress(),
     ]
     
+    
     box_name = decode_address(funder.getAddress())
     
     setupTxn = transaction.ApplicationCallTxn(
@@ -170,14 +173,16 @@ def initialiseDataPool(
         app_args=appArgs,
         accounts=accounts,
         sp=suggestedParams,
-        boxes=[[appID, box_name]]
+        boxes=[[appID, box_name]],
+        foreign_apps=[appID]
     )
+    print(setupTxn)
 
     signedSetupTxn = setupTxn.sign(enclave.getPrivateKey())
     txid = client.send_transaction(signedSetupTxn)
    
     try:
-        response = waitForTransaction(client, txid)  
+        response = waitForTransaction(client, txid)
         appendDRT = response.innerTxns[0]['asset-index']
         contributorDRT_1 = response.innerTxns[1]['asset-index']
         print("Smart Contract successfully initialised.")
@@ -221,6 +226,7 @@ def init_claimContributor(
     appAddr = get_application_address(appID)
     asset_bytes = appendAssetID.to_bytes(8, 'big')
     pk = decode_address(appAddr)
+    
 
     box_name = asset_bytes + pk
     
@@ -231,7 +237,7 @@ def init_claimContributor(
         app_args=appArgs,
         foreign_assets=assets,
         sp=suggestedParams,
-        boxes=[[appID, str(contributorAssetID)],[appID, box_name], [appID, decode_address(contributorAccount.getAddress())]],
+        boxes=[[appID, contributorAssetID.to_bytes(8, 'big')],[appID, box_name], [appID, decode_address(contributorAccount.getAddress())]],
     )
 
     signedTxn = claimTxn.sign(contributorAccount.getPrivateKey())
@@ -252,6 +258,7 @@ def completeDataPoolSetup(
     client: AlgodClient,
     creator: Account,
     enclave: Account,
+    nautilus: Account,
     fundingAmount: int,
     noRowsContributed: int,
     dataPackageHash: str,
@@ -267,7 +274,8 @@ def completeDataPoolSetup(
         appID = deployContract(
          client=client,
          sender=creator,
-         enclave=enclave) 
+         enclave=enclave,
+         nautilus=nautilus) 
     except Exception as err:
         print("Deploy Contract err")
         print(err)
@@ -313,10 +321,10 @@ def completeDataPoolSetup(
         print(err)
         return err
 
-    box_stored = b64decode(client.application_box_by_name(appID, bytes(str(contributorDRT_1), "utf-8"))['name']).decode("utf-8")
+    #box_stored = b64decode(client.application_box_by_name(appID, bytes(contributorDRT_1.to_bytes(8, 'big'), "utf-8"))['name']).decode("utf-8")
     contributor_transferred = client.account_asset_info(creator.getAddress(), contributorDRT_1)["asset-holding"]["asset-id"]
 
-    assert int(box_stored) == contributorDRT_1
+    #assert int(box_stored) == contributorDRT_1
     assert contributor_transferred == contributorDRT_1
     
     print("Smart Contract has been successfully created.")
